@@ -19,6 +19,7 @@ defmodule Solana.SPL.TokenSwap do
   Token Swap account information.
   """
   @spec from_account_info(info :: map) :: map | :error
+  def from_account_info(info)
   def from_account_info(%{"data" => [data, "base64"]}) do
     case Base.decode64(data) do
       {:ok, decoded} when byte_size(decoded) == 324 ->
@@ -55,6 +56,8 @@ defmodule Solana.SPL.TokenSwap do
         :error
     end
   end
+
+  def from_account_info(_), do: :error
 
   @doc """
   The size of a serialized token swap account.
