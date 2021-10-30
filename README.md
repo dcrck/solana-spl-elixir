@@ -32,4 +32,4 @@ This library implements instructions and tests for the following programs:
 - [x] [Associated Token Account
   Program](https://spl.solana.com/associated-token-account):
   `Solana.SPL.AssociatedToken`
-- [ ] [Token Swap Program](https://spl.solana.com/token)
+- [x] [Token Swap Program](https://spl.solana.com/token): `Solana.SPL.TokenSwap`

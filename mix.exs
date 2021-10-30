@@ -57,6 +57,9 @@ defmodule Solana.SPL.MixProject do
       source_url: @source_url,
       extras: ["README.md", "LICENSE"],
       groups_for_modules: [
+        "Token Swap": [
+          Solana.SPL.TokenSwap,
+        ],
         "Associated Token": [
           Solana.SPL.AssociatedToken,
         ],
