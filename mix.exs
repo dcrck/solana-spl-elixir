@@ -60,10 +60,10 @@ defmodule Solana.SPL.MixProject do
       extras: ["README.md", "LICENSE"],
       groups_for_modules: [
         "Token Swap": [
-          Solana.SPL.TokenSwap,
+          Solana.SPL.TokenSwap
         ],
         "Associated Token": [
-          Solana.SPL.AssociatedToken,
+          Solana.SPL.AssociatedToken
         ],
         Token: [
           Solana.SPL.Token,

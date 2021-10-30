@@ -20,6 +20,7 @@ defmodule Solana.SPL.TokenSwap do
   """
   @spec from_account_info(info :: map) :: map | :error
   def from_account_info(info)
+
   def from_account_info(%{"data" => [data, "base64"]}) do
     case Base.decode64(data) do
       {:ok, decoded} when byte_size(decoded) == 324 ->
