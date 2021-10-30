@@ -15,8 +15,14 @@ defmodule Solana.SPL.TokenSwap do
   def id(), do: Solana.pubkey!("SwaPpA9LAaLfeLi3a68M4DjnLqgtticKg6CnyNwgAC8")
 
   @doc """
+  The size of a serialized token swap account.
+  """
+  @spec byte_size() :: pos_integer
+  def byte_size(), do: 324
+
+  @doc """
   Translates the result of a `Solana.RPC.Request.get_account_info/2` into
-  Token Swap account information.
+  token swap account information.
   """
   @spec from_account_info(info :: map) :: map | :error
   def from_account_info(info)
@@ -59,12 +65,6 @@ defmodule Solana.SPL.TokenSwap do
   end
 
   def from_account_info(_), do: :error
-
-  @doc """
-  The size of a serialized token swap account.
-  """
-  @spec byte_size() :: pos_integer
-  def byte_size(), do: 324
 
   @doc false
   def validate_fee(f = {n, d})
@@ -179,7 +179,7 @@ defmodule Solana.SPL.TokenSwap do
     ]
   ]
   @doc """
-  Creates the instructions which initialize a new token swap account.
+  Creates the instructions to initialize a new token swap account.
 
   ## Options
 
@@ -250,22 +250,22 @@ defmodule Solana.SPL.TokenSwap do
     user_source: [
       type: {:custom, Solana.Key, :check, []},
       required: true,
-      doc: "User's source token account."
+      doc: "User's source token account. Must have the same mint as `swap_source`."
     ],
     swap_source: [
       type: {:custom, Solana.Key, :check, []},
       required: true,
-      doc: "`swap` source token account."
+      doc: "`swap` source token account. Must have the same mint as `user_source`."
     ],
     user_destination: [
       type: {:custom, Solana.Key, :check, []},
       required: true,
-      doc: "User's destination token account."
+      doc: "User's destination token account. Must have the same mint as `swap_destination`."
     ],
     swap_destination: [
       type: {:custom, Solana.Key, :check, []},
       required: true,
-      doc: "`swap` destination token account."
+      doc: "`swap` destination token account. Must have the same mint as `user_destination`."
     ],
     pool_mint: [
       type: {:custom, Solana.Key, :check, []},
@@ -298,7 +298,7 @@ defmodule Solana.SPL.TokenSwap do
     ]
   ]
   @doc """
-  Swap token `A` for token `B`.
+  Creates the instructions to swap token `A` for token `B` or vice versa.
 
   ## Options
 
@@ -400,7 +400,7 @@ defmodule Solana.SPL.TokenSwap do
     ]
   ]
   @doc """
-  Deposits both `A` and `B` tokens into the pool.
+  Creates the instructions to deposit both `A` and `B` tokens into the pool.
 
   ## Options
 
@@ -506,7 +506,7 @@ defmodule Solana.SPL.TokenSwap do
     ]
   ]
   @doc """
-  Withdraws both `A` and `B` tokens from the pool.
+  Creates the instructions to withdraw both `A` and `B` tokens from the pool.
 
   ## Options
 
@@ -598,7 +598,7 @@ defmodule Solana.SPL.TokenSwap do
     ]
   ]
   @doc """
-  Deposits `A` or `B` tokens into the pool.
+  Creates the instructions to deposit `A` or `B` tokens into the pool.
 
   ## Options
 
@@ -687,7 +687,7 @@ defmodule Solana.SPL.TokenSwap do
     ]
   ]
   @doc """
-  Withdraws `A` or `B` tokens from the pool.
+  Creates the instructions to withdraw `A` or `B` tokens from the pool.
 
   ## Options
 
