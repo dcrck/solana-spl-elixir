@@ -1,8 +1,8 @@
 defmodule Solana.SPL.MixProject do
   use Mix.Project
 
-  @source_url "https://git.sr.ht/~dcrck/solana-spl"
-  @version "0.1.0"
+  @source_url "https://github.com/dcrck/solana-spl-elixir"
+  @version "0.1.1"
 
   def project do
     [
@@ -38,7 +38,10 @@ defmodule Solana.SPL.MixProject do
     [
       maintainers: ["Derek Meer"],
       licenses: ["MIT"],
-      links: %{"SourceHut" => "https://git.sr.ht/~dcrck/solana-spl"}
+      links: %{
+        "SourceHut" => "https://git.sr.ht/~dcrck/solana-spl",
+        "GitHub" => @source_url
+      }
     ]
   end
 
