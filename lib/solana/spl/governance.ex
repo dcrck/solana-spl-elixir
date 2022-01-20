@@ -124,7 +124,7 @@ defmodule Solana.SPL.Governance do
             {params.name, "str"},
             if(Map.has_key?(params, :council_mint), do: 1, else: 0),
             {params.minimum, 64},
-            Enum.find_index(@mint_max_vote_weight_sources, elem(params.max_vote_weight_source, 0)),
+            Enum.find_index(@mint_max_vote_weight_sources, &(&1 == elem(params.max_vote_weight_source, 0))),
             {elem(params.max_vote_weight_source, 1), 64},
             if(Map.has_key?(params, :addin), do: 1, else: 0),
           ])
