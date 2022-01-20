@@ -121,7 +121,9 @@ defmodule Solana.SPL.Governance do
             | maybe_add_voter_weight_addin(params)
           ]),
           data: Instruction.encode_data([
-            {params.name, "str"},
+            0,
+            {byte_size(params.name), 32},
+            params.name,
             if(Map.has_key?(params, :council_mint), do: 1, else: 0),
             {params.minimum, 64},
             Enum.find_index(@mint_max_vote_weight_sources, &(&1 == elem(params.max_vote_weight_source, 0))),
