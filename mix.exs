@@ -48,7 +48,7 @@ defmodule Solana.SPL.MixProject do
   defp deps do
     [
       # base solana interface
-      {:solana, "~> 0.1.0"},
+      {:solana, "~> 0.2.0"},
       # docs and testing
       {:ex_doc, "~> 0.25.5", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false}
