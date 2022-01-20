@@ -26,7 +26,7 @@ defmodule Solana.SPL.Governance do
   Finds a token holding address for the given community/council `mint`. Should
   have the seeds: `['governance', realm, mint]`.
   """
-  @spec find_holding_address(program :: Key.t, realm :: Key.t, mint :: Key.t) :: Key.t
+  @spec find_holding_address(program :: Key.t(), realm :: Key.t(), mint :: Key.t()) :: Key.t()
   def find_holding_address(program, realm, mint) do
     case Key.find_address(["governance", realm, mint], program) do
       {:ok, address, _} -> address
@@ -38,7 +38,7 @@ defmodule Solana.SPL.Governance do
   Finds the realm config address for the given `realm`. Should have the seeds:
   `['realm-config', realm]`.
   """
-  @spec find_realm_config_address(program :: Key.t, realm :: Key.t) :: Key.t
+  @spec find_realm_config_address(program :: Key.t(), realm :: Key.t()) :: Key.t()
   def find_realm_config_address(program, realm) do
     case Key.find_address(["realm-config", realm], program) do
       {:ok, address, _} -> address
@@ -115,22 +115,31 @@ defmodule Solana.SPL.Governance do
       {:ok, params} ->
         %Instruction{
           program: params.program,
-          accounts: List.flatten([
-            create_realm_accounts(Map.pop(params, :council_mint)),
-            %Account{key: find_realm_config_address(params.program, params.new), writable?: true}
-            | maybe_add_voter_weight_addin(params)
-          ]),
-          data: Instruction.encode_data([
-            0,
-            {byte_size(params.name), 32},
-            params.name,
-            if(Map.has_key?(params, :council_mint), do: 1, else: 0),
-            {params.minimum, 64},
-            Enum.find_index(@mint_max_vote_weight_sources, &(&1 == elem(params.max_vote_weight_source, 0))),
-            {elem(params.max_vote_weight_source, 1), 64},
-            if(Map.has_key?(params, :addin), do: 1, else: 0),
-          ])
+          accounts:
+            List.flatten([
+              create_realm_accounts(Map.pop(params, :council_mint)),
+              %Account{
+                key: find_realm_config_address(params.program, params.new),
+                writable?: true
+              }
+              | maybe_add_voter_weight_addin(params)
+            ]),
+          data:
+            Instruction.encode_data([
+              0,
+              {byte_size(params.name), 32},
+              params.name,
+              if(Map.has_key?(params, :council_mint), do: 1, else: 0),
+              {params.minimum, 64},
+              Enum.find_index(
+                @mint_max_vote_weight_sources,
+                &(&1 == elem(params.max_vote_weight_source, 0))
+              ),
+              {elem(params.max_vote_weight_source, 1), 64},
+              if(Map.has_key?(params, :addin), do: 1, else: 0)
+            ])
         }
+
       error ->
         error
     end
@@ -145,7 +154,7 @@ defmodule Solana.SPL.Governance do
       %Account{key: params.payer, signer?: true},
       %Account{key: SystemProgram.id()},
       %Account{key: Token.id()},
-      %Account{key: Solana.rent()},
+      %Account{key: Solana.rent()}
     ]
   end
 
@@ -153,7 +162,7 @@ defmodule Solana.SPL.Governance do
     List.flatten([
       create_realm_accounts({nil, params}),
       %Account{key: mint},
-      %Account{key: find_holding_address(params.program, params.new, mint), writable?: true},
+      %Account{key: find_holding_address(params.program, params.new, mint), writable?: true}
     ])
   end
 
@@ -164,7 +173,7 @@ defmodule Solana.SPL.Governance do
   defp maybe_add_voter_weight_addin(_), do: []
 
   def validate_vote_weight_source({type, value})
-  when type in @mint_max_vote_weight_sources and is_integer(value) and value > 0 do
+      when type in @mint_max_vote_weight_sources and is_integer(value) and value > 0 do
     {:ok, {type, value}}
   end
 
