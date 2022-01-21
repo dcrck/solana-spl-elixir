@@ -82,6 +82,8 @@ defmodule Solana.SPL.GovernanceTest do
                  client,
                  RPC.Request.get_account_info(realm, commitment: "confirmed")
                )
+
+      # TODO add more assertions
     end
 
     test "creates a realm with a community mint and council mint", %{
@@ -149,6 +151,8 @@ defmodule Solana.SPL.GovernanceTest do
                  client,
                  RPC.Request.get_account_info(realm, commitment: "confirmed")
                )
+
+      # TODO add more assertions
     end
   end
 
@@ -563,6 +567,202 @@ defmodule Solana.SPL.GovernanceTest do
                )
 
       assert %Token{amount: 1} = Token.from_account_info(token_info)
+    end
+  end
+
+  describe "delegate/1" do
+    test "delegates voting rights for community tokens", %{
+      client: client,
+      payer: payer,
+      tracker: tracker,
+      program: program
+    } do
+      [community_mint, token, delegate] = keypairs(3)
+
+      tx_reqs = [
+        RPC.Request.get_recent_blockhash(commitment: "confirmed"),
+        RPC.Request.get_minimum_balance_for_rent_exemption(Token.byte_size(),
+          commitment: "confirmed"
+        ),
+        RPC.Request.get_minimum_balance_for_rent_exemption(Token.Mint.byte_size(),
+          commitment: "confirmed"
+        )
+      ]
+
+      [%{"blockhash" => blockhash}, token_balance, mint_balance] =
+        client
+        |> RPC.send(tx_reqs)
+        |> Enum.map(fn {:ok, result} -> result end)
+
+      name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
+      {:ok, realm, _} = Key.find_address(["governance", name], program)
+
+      deposit_tx = %Transaction{
+        instructions: [
+          Token.Mint.init(
+            balance: mint_balance,
+            payer: pubkey!(payer),
+            authority: pubkey!(payer),
+            new: pubkey!(community_mint),
+            decimals: 0
+          ),
+          Token.init(
+            balance: token_balance,
+            payer: pubkey!(payer),
+            owner: pubkey!(payer),
+            new: pubkey!(token),
+            mint: pubkey!(community_mint)
+          ),
+          Token.mint_to(
+            token: pubkey!(token),
+            mint: pubkey!(community_mint),
+            authority: pubkey!(payer),
+            amount: 1
+          ),
+          Governance.create_realm(
+            payer: pubkey!(payer),
+            authority: pubkey!(payer),
+            new: realm,
+            community_mint: pubkey!(community_mint),
+            program: program,
+            name: name,
+            max_vote_weight_source: {:fraction, 10_000_000_000},
+            minimum: 1
+          ),
+          Governance.deposit(
+            payer: pubkey!(payer),
+            owner: pubkey!(payer),
+            authority: pubkey!(payer),
+            realm: realm,
+            mint: pubkey!(community_mint),
+            from: pubkey!(token),
+            amount: 1,
+            program: program
+          ),
+          Governance.delegate(
+            owner: pubkey!(payer),
+            realm: realm,
+            mint: pubkey!(community_mint),
+            to: pubkey!(delegate),
+            program: program
+          )
+        ],
+        signers: [payer, community_mint, token],
+        blockhash: blockhash,
+        payer: pubkey!(payer)
+      }
+
+      assert {:ok, _signatures} =
+        RPC.send_and_confirm(
+          client,
+          tracker,
+          deposit_tx,
+          commitment: "confirmed",
+          timeout: 1_000
+        )
+
+      # TODO add more assertions
+    end
+
+    test "delegates voting rights for council tokens", %{
+      client: client,
+      payer: payer,
+      tracker: tracker,
+      program: program
+    } do
+      [community_mint, council_mint, token, delegate] = keypairs(4)
+
+      tx_reqs = [
+        RPC.Request.get_recent_blockhash(commitment: "confirmed"),
+        RPC.Request.get_minimum_balance_for_rent_exemption(Token.byte_size(),
+          commitment: "confirmed"
+        ),
+        RPC.Request.get_minimum_balance_for_rent_exemption(Token.Mint.byte_size(),
+          commitment: "confirmed"
+        )
+      ]
+
+      [%{"blockhash" => blockhash}, token_balance, mint_balance] =
+        client
+        |> RPC.send(tx_reqs)
+        |> Enum.map(fn {:ok, result} -> result end)
+
+      name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
+      {:ok, realm, _} = Key.find_address(["governance", name], program)
+
+      deposit_tx = %Transaction{
+        instructions: [
+          Token.Mint.init(
+            balance: mint_balance,
+            payer: pubkey!(payer),
+            authority: pubkey!(payer),
+            new: pubkey!(community_mint),
+            decimals: 0
+          ),
+          Token.Mint.init(
+            balance: mint_balance,
+            payer: pubkey!(payer),
+            authority: pubkey!(payer),
+            new: pubkey!(council_mint),
+            decimals: 0
+          ),
+          Token.init(
+            balance: token_balance,
+            payer: pubkey!(payer),
+            owner: pubkey!(payer),
+            new: pubkey!(token),
+            mint: pubkey!(council_mint)
+          ),
+          Token.mint_to(
+            token: pubkey!(token),
+            mint: pubkey!(council_mint),
+            authority: pubkey!(payer),
+            amount: 1
+          ),
+          Governance.create_realm(
+            payer: pubkey!(payer),
+            authority: pubkey!(payer),
+            new: realm,
+            community_mint: pubkey!(community_mint),
+            council_mint: pubkey!(council_mint),
+            program: program,
+            name: name,
+            max_vote_weight_source: {:fraction, 10_000_000_000},
+            minimum: 1
+          ),
+          Governance.deposit(
+            payer: pubkey!(payer),
+            owner: pubkey!(payer),
+            authority: pubkey!(payer),
+            realm: realm,
+            mint: pubkey!(council_mint),
+            from: pubkey!(token),
+            amount: 1,
+            program: program
+          ),
+          Governance.delegate(
+            owner: pubkey!(payer),
+            realm: realm,
+            mint: pubkey!(council_mint),
+            to: pubkey!(delegate),
+            program: program
+          )
+        ],
+        signers: [payer, community_mint, council_mint, token],
+        blockhash: blockhash,
+        payer: pubkey!(payer)
+      }
+
+      assert {:ok, _signatures} =
+        RPC.send_and_confirm(
+          client,
+          tracker,
+          deposit_tx,
+          commitment: "confirmed",
+          timeout: 1_000
+        )
+
+      # TODO add more assertions
     end
   end
 end

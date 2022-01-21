@@ -243,8 +243,10 @@ defmodule Solana.SPL.Governance do
   ]
   @doc """
   Generates instructions which deposit governing tokens -- community or council
-  -- to the given `realm`. This establishes a user's voter weight to be used when
-  voting within the `realm`.
+  -- to the given `realm`.
+
+  This establishes a user's voter weight to be used when voting within the
+  `realm`.
 
   Note: If a subsequent (top up) deposit is made, the user's vote weights on
   active proposals *won't* be updated automatically. To do this, the user must
@@ -311,8 +313,9 @@ defmodule Solana.SPL.Governance do
   ]
   @doc """
   Generates instructions which withdraw governing tokens -- community or council
-  -- from the given `realm`. This downgrades a user's voter weight within the
-  `realm`.
+  -- from the given `realm`.
+
+  This downgrades a user's voter weight within the `realm`.
 
   Note: It's only possible to withdraw tokens if the user doesn't have any
   outstanding active votes. Otherwise, the user needs to relinquish those
@@ -345,4 +348,69 @@ defmodule Solana.SPL.Governance do
         error
     end
   end
+
+  @delegate_schema [
+    owner: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The current non-delegated holder of voting rights within the `realm`."
+    ],
+    realm: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the realm for which the `owner` will delegate voter rights."
+    ],
+    mint: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The mint for the token for which the `owner` will delegate voter rights."
+    ],
+    to: [
+      type: {:custom, Key, :check, []},
+      doc: """
+      The account which will receive voter rights from the `owner` in the given
+      `realm`. **Not including this argument will rescind the current delegate's
+      voting rights.**
+      """
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates instructions which set the new governance delegate for an ownership
+  account within the given `realm` and `mint`.
+
+  The delegate can vote or create Proposals on behalf of the `owner`.
+
+  Note: Delegating voting rights doesn't take them away from the original owner.
+
+  ## Options
+
+  #{NimbleOptions.docs(@delegate_schema)}
+  """
+  def delegate(opts) do
+    case validate(opts, @delegate_schema) do
+      {:ok, %{program: program, realm: realm, mint: mint, owner: owner} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: owner, signer?: true},
+            %Account{
+              key: find_owner_record_address(program, realm, mint, owner),
+              writable?: true
+            },
+          ],
+          data: Instruction.encode_data([ 3 | delegate_data(params)])
+        }
+
+      error ->
+        error
+    end
+  end
+
+  defp delegate_data(%{to: delegate}), do: [1, delegate]
+  defp delegate_data(_), do: [0]
 end
