@@ -46,11 +46,28 @@ defmodule Solana.SPL.Governance do
     end
   end
 
+  @doc """
+  Finds the token owner record address for the given `realm`, `mint`, and
+  `owner`. Should have the seeds: `['governance', realm, mint, owner]`.
+  """
+  @spec find_owner_record_address(
+          program :: Key.t(),
+          realm :: Key.t(),
+          mint :: Key.t(),
+          owner :: Key.t()
+        ) :: Key.t()
+  def find_owner_record_address(program, realm, mint, owner) do
+    case Key.find_address(["governance", realm, mint, owner], program) do
+      {:ok, address, _} -> address
+      error -> error
+    end
+  end
+
   @create_realm_schema [
     payer: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "The account which will pay for the `new` realm account's creation"
+      doc: "The account which will pay for the `new` realm account's creation."
     ],
     authority: [
       type: {:custom, Key, :check, []},
@@ -104,7 +121,7 @@ defmodule Solana.SPL.Governance do
     ]
   ]
   @doc """
-  Creates instructions which create a new realm.
+  Generates instructions which create a new realm.
 
   ## Options
 
@@ -178,4 +195,87 @@ defmodule Solana.SPL.Governance do
   end
 
   def validate_vote_weight_source(_), do: {:error, "invalid max vote weight source"}
+
+  @deposit_schema [
+    owner: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The `from` token account's owner."
+    ],
+    authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The `from` token account's transfer authority."
+    ],
+    realm: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the realm to deposit user tokens into."
+    ],
+    mint: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The mint for the token the user wishes to deposit."
+    ],
+    from: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The user's token account."
+    ],
+    payer: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The account which will pay for this instruction."
+    ],
+    amount: [
+      type: :pos_integer,
+      required: true,
+      doc: "The number of tokens to transfer."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates instructions which deposit governing tokens -- community or council
+  -- to the given `realm`. This establishes a user's voter weight to be used when
+  voting within the `realm`.
+
+  Note: If a subsequent (top up) deposit is made, the user's vote weights on
+  active proposals *won't* be updated automatically. To do this, the user must
+  relinquish their votes and vote again.
+
+  ## Options
+
+  #{NimbleOptions.docs(@deposit_schema)}
+  """
+  def deposit(opts) do
+    case validate(opts, @deposit_schema) do
+      {:ok, %{program: program, realm: realm, mint: mint, owner: owner} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: realm},
+            %Account{key: find_holding_address(program, realm, mint), writable?: true},
+            %Account{key: params.from, writable?: true},
+            %Account{key: owner, signer?: true},
+            %Account{key: params.authority, signer?: true},
+            %Account{
+              key: find_owner_record_address(program, realm, mint, owner),
+              writable?: true
+            },
+            %Account{key: params.payer, signer?: true},
+            %Account{key: SystemProgram.id()},
+            %Account{key: Token.id()},
+            %Account{key: Solana.rent()}
+          ],
+          data: Instruction.encode_data([1, {params.amount, 64}])
+        }
+
+      error ->
+        error
+    end
+  end
 end
