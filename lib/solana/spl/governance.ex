@@ -225,7 +225,10 @@ defmodule Solana.SPL.Governance do
     payer: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "The account which will pay for this instruction."
+      doc: """
+      The account which will pay to create the user's token owner record account
+      (if necessary).
+      """
     ],
     amount: [
       type: :pos_integer,
@@ -272,6 +275,70 @@ defmodule Solana.SPL.Governance do
             %Account{key: Solana.rent()}
           ],
           data: Instruction.encode_data([1, {params.amount, 64}])
+        }
+
+      error ->
+        error
+    end
+  end
+
+  @withdraw_schema [
+    owner: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The `to` token account's owner."
+    ],
+    realm: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the realm to withdraw user tokens from."
+    ],
+    mint: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The mint for the token the user wishes to withdraw."
+    ],
+    to: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The user's token account. All tokens will be transferred to this account."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates instructions which withdraw governing tokens -- community or council
+  -- from the given `realm`. This downgrades a user's voter weight within the
+  `realm`.
+
+  Note: It's only possible to withdraw tokens if the user doesn't have any
+  outstanding active votes. Otherwise, the user needs to relinquish those
+  votes before withdrawing their tokens.
+
+  ## Options
+
+  #{NimbleOptions.docs(@withdraw_schema)}
+  """
+  def withdraw(opts) do
+    case validate(opts, @withdraw_schema) do
+      {:ok, %{program: program, realm: realm, mint: mint, owner: owner} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: realm},
+            %Account{key: find_holding_address(program, realm, mint), writable?: true},
+            %Account{key: params.to, writable?: true},
+            %Account{key: owner, signer?: true},
+            %Account{
+              key: find_owner_record_address(program, realm, mint, owner),
+              writable?: true
+            },
+            %Account{key: Token.id()}
+          ],
+          data: Instruction.encode_data([2])
         }
 
       error ->
