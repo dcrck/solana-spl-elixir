@@ -383,7 +383,7 @@ defmodule Solana.SPL.GovernanceTest do
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
       {:ok, realm, _} = Key.find_address(["governance", name], program)
 
-      deposit_tx = %Transaction{
+      withdraw_tx = %Transaction{
         instructions: [
           Token.Mint.init(
             balance: mint_balance,
@@ -442,7 +442,7 @@ defmodule Solana.SPL.GovernanceTest do
         RPC.send_and_confirm(
           client,
           tracker,
-          deposit_tx,
+          withdraw_tx,
           commitment: "confirmed",
           timeout: 1_000
         )
@@ -485,7 +485,7 @@ defmodule Solana.SPL.GovernanceTest do
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
       {:ok, realm, _} = Key.find_address(["governance", name], program)
 
-      deposit_tx = %Transaction{
+      withdraw_tx = %Transaction{
         instructions: [
           Token.Mint.init(
             balance: mint_balance,
@@ -552,7 +552,7 @@ defmodule Solana.SPL.GovernanceTest do
         RPC.send_and_confirm(
           client,
           tracker,
-          deposit_tx,
+          withdraw_tx,
           commitment: "confirmed",
           timeout: 1_000
         )
@@ -597,7 +597,7 @@ defmodule Solana.SPL.GovernanceTest do
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
       {:ok, realm, _} = Key.find_address(["governance", name], program)
 
-      deposit_tx = %Transaction{
+      delegate_tx = %Transaction{
         instructions: [
           Token.Mint.init(
             balance: mint_balance,
@@ -653,13 +653,13 @@ defmodule Solana.SPL.GovernanceTest do
       }
 
       assert {:ok, _signatures} =
-        RPC.send_and_confirm(
-          client,
-          tracker,
-          deposit_tx,
-          commitment: "confirmed",
-          timeout: 1_000
-        )
+               RPC.send_and_confirm(
+                 client,
+                 tracker,
+                 delegate_tx,
+                 commitment: "confirmed",
+                 timeout: 1_000
+               )
 
       # TODO add more assertions
     end
@@ -690,7 +690,7 @@ defmodule Solana.SPL.GovernanceTest do
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
       {:ok, realm, _} = Key.find_address(["governance", name], program)
 
-      deposit_tx = %Transaction{
+      delegate_tx = %Transaction{
         instructions: [
           Token.Mint.init(
             balance: mint_balance,
@@ -754,13 +754,13 @@ defmodule Solana.SPL.GovernanceTest do
       }
 
       assert {:ok, _signatures} =
-        RPC.send_and_confirm(
-          client,
-          tracker,
-          deposit_tx,
-          commitment: "confirmed",
-          timeout: 1_000
-        )
+               RPC.send_and_confirm(
+                 client,
+                 tracker,
+                 delegate_tx,
+                 commitment: "confirmed",
+                 timeout: 1_000
+               )
 
       # TODO add more assertions
     end
