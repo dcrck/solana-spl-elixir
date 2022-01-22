@@ -9,7 +9,9 @@ defmodule Solana.SPL.Governance do
   alias Solana.{SPL.Token, Key, Instruction, Account, SystemProgram}
   import Solana.Helpers
 
-  @mint_max_vote_weight_sources [:fraction, :absolute]
+  @max_vote_weight_sources [:fraction, :absolute]
+  @vote_weight_sources [:deposit, :snapshot]
+  @vote_thresholds [:yes, :quorum]
 
   @doc """
   The Governance program's default instance ID. Organizations can also deploy
@@ -28,10 +30,7 @@ defmodule Solana.SPL.Governance do
   """
   @spec find_holding_address(program :: Key.t(), realm :: Key.t(), mint :: Key.t()) :: Key.t()
   def find_holding_address(program, realm, mint) do
-    case Key.find_address(["governance", realm, mint], program) do
-      {:ok, address, _} -> address
-      error -> error
-    end
+    maybe_return_address(["governance", realm, mint], program)
   end
 
   @doc """
@@ -40,10 +39,7 @@ defmodule Solana.SPL.Governance do
   """
   @spec find_realm_config_address(program :: Key.t(), realm :: Key.t()) :: Key.t()
   def find_realm_config_address(program, realm) do
-    case Key.find_address(["realm-config", realm], program) do
-      {:ok, address, _} -> address
-      error -> error
-    end
+    maybe_return_address(["realm-config", realm], program)
   end
 
   @doc """
@@ -57,7 +53,21 @@ defmodule Solana.SPL.Governance do
           owner :: Key.t()
         ) :: Key.t()
   def find_owner_record_address(program, realm, mint, owner) do
-    case Key.find_address(["governance", realm, mint, owner], program) do
+    maybe_return_address(["governance", realm, mint, owner], program)
+  end
+
+  @doc """
+  Finds the account governance address for the given `realm` and `account`.
+  Should have the seeds: `['account-governance', realm, account]`.
+  """
+  @spec find_account_governance_address(program :: Key.t(), realm :: Key.t(), account :: Key.t()) ::
+          Key.t()
+  def find_account_governance_address(program, realm, account) do
+    maybe_return_address(["account-governance", realm, account], program)
+  end
+
+  defp maybe_return_address(seeds, program) do
+    case Key.find_address(seeds, program) do
       {:ok, address, _} -> address
       error -> error
     end
@@ -106,7 +116,7 @@ defmodule Solana.SPL.Governance do
       doc: "The name of the `new` realm to create."
     ],
     max_vote_weight_source: [
-      type: {:custom, __MODULE__, :validate_vote_weight_source, []},
+      type: {:custom, __MODULE__, :validate_max_vote_weight_source, []},
       required: true,
       doc: """
       The source of max vote weight used for voting. Values below 100%
@@ -149,7 +159,7 @@ defmodule Solana.SPL.Governance do
               if(Map.has_key?(params, :council_mint), do: 1, else: 0),
               {params.minimum, 64},
               Enum.find_index(
-                @mint_max_vote_weight_sources,
+                @max_vote_weight_sources,
                 &(&1 == elem(params.max_vote_weight_source, 0))
               ),
               {elem(params.max_vote_weight_source, 1), 64},
@@ -189,12 +199,13 @@ defmodule Solana.SPL.Governance do
 
   defp maybe_add_voter_weight_addin(_), do: []
 
-  def validate_vote_weight_source({type, value})
-      when type in @mint_max_vote_weight_sources and is_integer(value) and value > 0 do
+  @doc false
+  def validate_max_vote_weight_source({type, value})
+      when type in @max_vote_weight_sources and is_integer(value) and value > 0 do
     {:ok, {type, value}}
   end
 
-  def validate_vote_weight_source(_), do: {:error, "invalid max vote weight source"}
+  def validate_max_vote_weight_source(_), do: {:error, "invalid max vote weight source"}
 
   @deposit_schema [
     owner: [
@@ -401,9 +412,9 @@ defmodule Solana.SPL.Governance do
             %Account{
               key: find_owner_record_address(program, realm, mint, owner),
               writable?: true
-            },
+            }
           ],
-          data: Instruction.encode_data([ 3 | delegate_data(params)])
+          data: Instruction.encode_data([3 | delegate_data(params)])
         }
 
       error ->
@@ -413,4 +424,163 @@ defmodule Solana.SPL.Governance do
 
   defp delegate_data(%{to: delegate}), do: [1, delegate]
   defp delegate_data(_), do: [0]
+
+  @governance_config_schema [
+    threshold: [
+      type: {:custom, __MODULE__, :validate_threshold, []},
+      required: true,
+      docs: "The type of vote threshold used to resolve a Proposal vote."
+    ],
+    vote_weight_source: [
+      type: {:in, @vote_weight_sources},
+      required: true,
+      docs: "The source of vote weight for voters."
+    ],
+    minimum_community: [
+      type: :non_neg_integer,
+      required: true,
+      docs: "The minimum number of community tokens an owner must have to create a proposal."
+    ],
+    minimum_council: [
+      type: :non_neg_integer,
+      required: true,
+      docs: "The minimum number of council tokens an owner must have to create a proposal."
+    ],
+    duration: [
+      type: :non_neg_integer,
+      required: true,
+      docs: "Time limit (in seconds) for a proposal to be open for voting."
+    ],
+    cooldown: [
+      type: :non_neg_integer,
+      required: true,
+      docs: """
+      The time period (in seconds) within which a proposal can still be cancelled after voting has
+      ended.
+      """
+    ],
+    delay: [
+      type: :non_neg_integer,
+      required: true,
+      docs: """
+      Minimum wait time (in seconds) after a proposal has been voted on before an instruction can
+      be executed.
+      """
+    ]
+  ]
+
+  @doc false
+  def validate_threshold({type, pct}) when type in @vote_thresholds and pct in 1..100 do
+    {:ok, {type, pct}}
+  end
+
+  def validate_threshold(threshold) do
+    {:error, "expected {:yes, percentage} or {:quorum, percentage}, got: #{inspect(threshold)}"}
+  end
+
+  @create_account_governance_schema [
+    payer: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The account which will pay for the new Account Governance account's creation."
+    ],
+    owner: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the token owner which will govern the account."
+    ],
+    authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance authority."
+    ],
+    realm: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the realm the created Governance belongs to."
+    ],
+    mint: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The mint for the token for which the `owner` will delegate voter rights."
+    ],
+    governed: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The account which will be goverened by the newly created governance."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ],
+    voter_weight_record: [
+      type: {:custom, Key, :check, []},
+      doc: "Public key of the voter weight record account."
+    ],
+    config: [
+      type: {:custom, Solana.Helpers, :validate, [@governance_config_schema]},
+      required: true,
+      doc: """
+      The desired governance configuration.
+
+      ### Options
+
+      #{NimbleOptions.docs(@governance_config_schema)}
+      """
+    ]
+  ]
+  @doc """
+  Generates instructions which create an Account Governance account, used to
+  govern an arbitrary account.
+
+  ## Options
+
+  #{NimbleOptions.docs(@create_account_governance_schema)}
+  """
+  def create_account_governance(opts) do
+    case validate(opts, @create_account_governance_schema) do
+      {:ok, %{program: program, realm: realm, governed: governed, owner: owner} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: realm},
+            %Account{
+              key: find_account_governance_address(program, realm, governed),
+              writable?: true
+            },
+            %Account{key: governed},
+            %Account{key: find_owner_record_address(program, realm, params.mint, owner)},
+            %Account{key: params.payer, signer?: true},
+            %Account{key: SystemProgram.id()},
+            %Account{key: Solana.rent()},
+            %Account{key: params.authority, signer?: true}
+            | voter_weight_accounts(params)
+          ],
+          data: Instruction.encode_data([4 | serialize_config(params.config)])
+        }
+
+      error ->
+        error
+    end
+  end
+
+  defp serialize_config(config) do
+    [
+      Enum.find_index(@vote_thresholds, &(&1 == elem(config.threshold, 0))),
+      elem(config.threshold, 1),
+      {config.minimum_community, 64},
+      {config.delay, 32},
+      {config.duration, 32},
+      Enum.find_index(@vote_weight_sources, &(&1 == config.vote_weight_source)),
+      {config.cooldown, 32},
+      {config.minimum_council, 64}
+    ]
+  end
+
+  defp voter_weight_accounts(%{voter_weight_record: record, realm: realm, program: program}) do
+    [%Account{key: find_realm_config_address(program, realm)}, %Account{key: record}]
+  end
+
+  defp voter_weight_accounts(_), do: []
 end
