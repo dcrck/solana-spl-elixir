@@ -429,40 +429,40 @@ defmodule Solana.SPL.Governance do
     threshold: [
       type: {:custom, __MODULE__, :validate_threshold, []},
       required: true,
-      docs: "The type of vote threshold used to resolve a Proposal vote."
+      doc: "The type of vote threshold used to resolve a Proposal vote."
     ],
     vote_weight_source: [
       type: {:in, @vote_weight_sources},
-      required: true,
-      docs: "The source of vote weight for voters."
+      default: :deposit,
+      doc: "The source of vote weight for voters."
     ],
     minimum_community: [
       type: :non_neg_integer,
-      required: true,
-      docs: "The minimum number of community tokens an owner must have to create a proposal."
+      default: 1,
+      doc: "The minimum number of community tokens an owner must have to create a proposal."
     ],
     minimum_council: [
       type: :non_neg_integer,
-      required: true,
-      docs: "The minimum number of council tokens an owner must have to create a proposal."
+      default: 1,
+      doc: "The minimum number of council tokens an owner must have to create a proposal."
     ],
     duration: [
       type: :non_neg_integer,
       required: true,
-      docs: "Time limit (in seconds) for a proposal to be open for voting."
+      doc: "Time limit (in seconds) for a proposal to be open for voting."
     ],
     cooldown: [
       type: :non_neg_integer,
-      required: true,
-      docs: """
+      default: 0,
+      doc: """
       The time period (in seconds) within which a proposal can still be cancelled after voting has
       ended.
       """
     ],
     delay: [
       type: :non_neg_integer,
-      required: true,
-      docs: """
+      default: 0,
+      doc: """
       Minimum wait time (in seconds) after a proposal has been voted on before an instruction can
       be executed.
       """
