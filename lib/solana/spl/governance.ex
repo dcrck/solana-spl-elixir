@@ -68,12 +68,32 @@ defmodule Solana.SPL.Governance do
 
   @doc """
   Finds the program governance address for the given `realm` and `governed`
-  program. Should have the seeds: `['account-governance', realm, account]`.
+  program. Should have the seeds: `['program-governance', realm, governed]`.
   """
   @spec find_program_governance_address(program :: Key.t(), realm :: Key.t(), governed :: Key.t()) ::
           Key.t()
   def find_program_governance_address(program, realm, governed) do
     maybe_return_found_address(["program-governance", realm, governed], program)
+  end
+
+  @doc """
+  Finds the mint governance address for the given `realm` and `mint`.
+  Should have the seeds: `['mint-governance', realm, mint]`.
+  """
+  @spec find_mint_governance_address(program :: Key.t(), realm :: Key.t(), mint :: Key.t()) ::
+          Key.t()
+  def find_mint_governance_address(program, realm, mint) do
+    maybe_return_found_address(["mint-governance", realm, mint], program)
+  end
+
+  @doc """
+  Finds the token governance address for the given `realm` and `token`.
+  Should have the seeds: `['token-governance', realm, token]`.
+  """
+  @spec find_token_governance_address(program :: Key.t(), realm :: Key.t(), token :: Key.t()) ::
+          Key.t()
+  def find_token_governance_address(program, realm, token) do
+    maybe_return_found_address(["token-governance", realm, token], program)
   end
 
   defp maybe_return_found_address(seeds, program) do
@@ -624,8 +644,8 @@ defmodule Solana.SPL.Governance do
       type: :boolean,
       default: false,
       doc: """
-      Whether or not the Program's upgrade authority should be transferred to
-      the governance PDA. This can also be done later.
+      Whether or not the `governed` program's upgrade authority should be
+      transferred to the governance PDA. This can also be done later.
       """
     ],
     config: [
@@ -687,6 +707,222 @@ defmodule Solana.SPL.Governance do
 
   defp bpf_loader(), do: Solana.pubkey!("BPFLoaderUpgradeab1e11111111111111111111111")
   defp find_program_data(program), do: maybe_return_found_address([program], bpf_loader())
+
+  @create_mint_governance_schema [
+    payer: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The account which will pay for the new Account Governance account's creation."
+    ],
+    owner: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the token owner which will govern the account."
+    ],
+    authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance authority."
+    ],
+    realm: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the realm the created Governance belongs to."
+    ],
+    mint: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The mint for the token the `owner` will use to create the governance account."
+    ],
+    governed: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The mint which will be goverened by the newly created governance."
+    ],
+    mint_authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The current mint authority of the `goverened` mint."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ],
+    voter_weight_record: [
+      type: {:custom, Key, :check, []},
+      doc: "Public key of the voter weight record account."
+    ],
+    config: [
+      type: {:custom, Solana.Helpers, :validate, [@governance_config_schema]},
+      required: true,
+      doc: """
+      The desired governance configuration.
+
+      ### Options
+
+      #{NimbleOptions.docs(@governance_config_schema)}
+      """
+    ],
+    transfer_mint_authority?: [
+      type: :boolean,
+      default: false,
+      doc: """
+      Whether or not the `governed` mint's authority should be transferred to
+      the governance PDA. This can also be done later.
+      """
+    ]
+  ]
+  @doc """
+  Generates instructions which create an Mint Governance account, used to
+  govern a token mint.
+
+  ## Options
+
+  #{NimbleOptions.docs(@create_mint_governance_schema)}
+  """
+  def create_mint_governance(opts) do
+    case validate(opts, @create_mint_governance_schema) do
+      {:ok, %{program: program, realm: realm, governed: governed, owner: owner} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: realm},
+            %Account{
+              key: find_mint_governance_address(program, realm, governed),
+              writable?: true
+            },
+            %Account{key: governed, writable?: true},
+            %Account{key: params.mint_authority, signer?: true},
+            %Account{key: find_owner_record_address(program, realm, params.mint, owner)},
+            %Account{key: params.payer, signer?: true},
+            %Account{key: Token.id()},
+            %Account{key: SystemProgram.id()},
+            %Account{key: Solana.rent()},
+            %Account{key: params.authority, signer?: true}
+            | voter_weight_accounts(params)
+          ],
+          data:
+            Instruction.encode_data(
+              List.flatten([
+                17,
+                serialize_config(params.config),
+                if(params.transfer_mint_authority?, do: 1, else: 0)
+              ])
+            )
+        }
+      error ->
+        error
+    end
+  end
+
+  @create_token_governance_schema [
+    payer: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The account which will pay for the new Account Governance account's creation."
+    ],
+    owner: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the token owner which will govern the account."
+    ],
+    authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance authority."
+    ],
+    realm: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the realm the created Governance belongs to."
+    ],
+    mint: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The mint for the token the `owner` will use to create the governance account."
+    ],
+    governed: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The account which will be goverened by the newly created governance."
+    ],
+    token_owner: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The current owner of the `goverened` token account."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ],
+    voter_weight_record: [
+      type: {:custom, Key, :check, []},
+      doc: "Public key of the voter weight record account."
+    ],
+    config: [
+      type: {:custom, Solana.Helpers, :validate, [@governance_config_schema]},
+      required: true,
+      doc: """
+      The desired governance configuration.
+
+      ### Options
+
+      #{NimbleOptions.docs(@governance_config_schema)}
+      """
+    ],
+    transfer_token_owner?: [
+      type: :boolean,
+      default: false,
+      doc: """
+      Whether or not the `governed` token's ownership should be transferred to
+      the governance PDA. This can also be done later.
+      """
+    ]
+  ]
+  @doc """
+  Generates instructions which create a Token Governance account, used to
+  govern a token account.
+
+  ## Options
+
+  #{NimbleOptions.docs(@create_token_governance_schema)}
+  """
+  def create_token_governance(opts) do
+    case validate(opts, @create_token_governance_schema) do
+      {:ok, %{program: program, realm: realm, governed: governed, owner: owner} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: realm},
+            %Account{
+              key: find_token_governance_address(program, realm, governed),
+              writable?: true
+            },
+            %Account{key: governed, writable?: true},
+            %Account{key: params.token_owner, signer?: true},
+            %Account{key: find_owner_record_address(program, realm, params.mint, owner)},
+            %Account{key: params.payer, signer?: true},
+            %Account{key: Token.id()},
+            %Account{key: SystemProgram.id()},
+            %Account{key: Solana.rent()},
+            %Account{key: params.authority, signer?: true}
+            | voter_weight_accounts(params)
+          ],
+          data:
+            Instruction.encode_data(
+              List.flatten([
+                18,
+                serialize_config(params.config),
+                if(params.transfer_token_owner?, do: 1, else: 0)
+              ])
+            )
+        }
+      error ->
+        error
+    end
+  end
 
   defp serialize_config(config) do
     [
