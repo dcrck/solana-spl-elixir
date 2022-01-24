@@ -30,7 +30,7 @@ defmodule Solana.SPL.Governance do
   """
   @spec find_holding_address(program :: Key.t(), realm :: Key.t(), mint :: Key.t()) :: Key.t()
   def find_holding_address(program, realm, mint) do
-    maybe_return_address(["governance", realm, mint], program)
+    maybe_return_found_address(["governance", realm, mint], program)
   end
 
   @doc """
@@ -39,7 +39,7 @@ defmodule Solana.SPL.Governance do
   """
   @spec find_realm_config_address(program :: Key.t(), realm :: Key.t()) :: Key.t()
   def find_realm_config_address(program, realm) do
-    maybe_return_address(["realm-config", realm], program)
+    maybe_return_found_address(["realm-config", realm], program)
   end
 
   @doc """
@@ -53,7 +53,7 @@ defmodule Solana.SPL.Governance do
           owner :: Key.t()
         ) :: Key.t()
   def find_owner_record_address(program, realm, mint, owner) do
-    maybe_return_address(["governance", realm, mint, owner], program)
+    maybe_return_found_address(["governance", realm, mint, owner], program)
   end
 
   @doc """
@@ -63,10 +63,20 @@ defmodule Solana.SPL.Governance do
   @spec find_account_governance_address(program :: Key.t(), realm :: Key.t(), account :: Key.t()) ::
           Key.t()
   def find_account_governance_address(program, realm, account) do
-    maybe_return_address(["account-governance", realm, account], program)
+    maybe_return_found_address(["account-governance", realm, account], program)
   end
 
-  defp maybe_return_address(seeds, program) do
+  @doc """
+  Finds the program governance address for the given `realm` and `governed`
+  program. Should have the seeds: `['account-governance', realm, account]`.
+  """
+  @spec find_program_governance_address(program :: Key.t(), realm :: Key.t(), governed :: Key.t()) ::
+          Key.t()
+  def find_program_governance_address(program, realm, governed) do
+    maybe_return_found_address(["program-governance", realm, governed], program)
+  end
+
+  defp maybe_return_found_address(seeds, program) do
     case Key.find_address(seeds, program) do
       {:ok, address, _} -> address
       error -> error
@@ -502,7 +512,7 @@ defmodule Solana.SPL.Governance do
     mint: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "The mint for the token for which the `owner` will delegate voter rights."
+      doc: "The mint for the token the `owner` will use to create the governance account."
     ],
     governed: [
       type: {:custom, Key, :check, []},
@@ -564,6 +574,119 @@ defmodule Solana.SPL.Governance do
         error
     end
   end
+
+  @create_program_governance_schema [
+    payer: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The account which will pay for the new Account Governance account's creation."
+    ],
+    owner: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the token owner which will govern the account."
+    ],
+    authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance authority."
+    ],
+    realm: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the realm the created Governance belongs to."
+    ],
+    mint: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The mint for the token the `owner` will use to create the governance account."
+    ],
+    governed: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The program which will be goverened by the newly created governance."
+    ],
+    upgrade_authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The current upgrade authority of the `goverened` program."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ],
+    voter_weight_record: [
+      type: {:custom, Key, :check, []},
+      doc: "Public key of the voter weight record account."
+    ],
+    transfer_upgrade_authority?: [
+      type: :boolean,
+      default: false,
+      doc: """
+      Whether or not the Program's upgrade authority should be transferred to
+      the governance PDA. This can also be done later.
+      """
+    ],
+    config: [
+      type: {:custom, Solana.Helpers, :validate, [@governance_config_schema]},
+      required: true,
+      doc: """
+      The desired governance configuration.
+
+      ### Options
+
+      #{NimbleOptions.docs(@governance_config_schema)}
+      """
+    ]
+  ]
+  @doc """
+  Generates instructions which create an Program Governance account, used to
+  govern an upgradable Solana program.
+
+  ## Options
+
+  #{NimbleOptions.docs(@create_program_governance_schema)}
+  """
+  def create_program_governance(opts) do
+    case validate(opts, @create_program_governance_schema) do
+      {:ok, %{program: program, realm: realm, governed: governed, owner: owner} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: realm},
+            %Account{
+              key: find_program_governance_address(program, realm, governed),
+              writable?: true
+            },
+            %Account{key: governed},
+            %Account{key: find_program_data(program), writable?: true},
+            %Account{key: params.upgrade_authority, signer?: true},
+            %Account{key: find_owner_record_address(program, realm, params.mint, owner)},
+            %Account{key: params.payer, signer?: true},
+            %Account{key: bpf_loader()},
+            %Account{key: SystemProgram.id()},
+            %Account{key: Solana.rent()},
+            %Account{key: params.authority, signer?: true}
+            | voter_weight_accounts(params)
+          ],
+          data:
+            Instruction.encode_data(
+              List.flatten([
+                5,
+                serialize_config(params.config),
+                if(params.transfer_upgrade_authority?, do: 1, else: 0)
+              ])
+            )
+        }
+
+      error ->
+        error
+    end
+  end
+
+  defp bpf_loader(), do: Solana.pubkey!("BPFLoaderUpgradeab1e11111111111111111111111")
+  defp find_program_data(program), do: maybe_return_found_address([program], bpf_loader())
 
   defp serialize_config(config) do
     [
