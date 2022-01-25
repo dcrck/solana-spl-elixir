@@ -1063,9 +1063,6 @@ defmodule Solana.SPL.Governance do
     end
   end
 
-  # TODO replace with with Solana.clock() once `solana` package is updated
-  defp clock(), do: Solana.pubkey!("SysvarC1ock11111111111111111111111111111111")
-
   def validate_vote_type(:single), do: {:ok, :single}
   def validate_vote_type({:multiple, n}) when is_integer(n) and n > 0, do: {:ok, {:multiple, n}}
 
@@ -1341,6 +1338,11 @@ defmodule Solana.SPL.Governance do
       type: :non_neg_integer,
       required: true,
       doc: "index the `instruction` will be removed from."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
     ]
   ]
   @doc """
@@ -1371,23 +1373,51 @@ defmodule Solana.SPL.Governance do
     end
   end
 
-  # @cancel_proposal_schema [
-  # ]
-  # @doc """
+  @cancel_proposal_schema [
+    governance: [type: {:custom, Key, :check, []}, required: true, doc: "The governance account."],
+    proposal: [type: {:custom, Key, :check, []}, required: true, doc: "The proposal account."],
+    owner_record: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the `proposal` owner's Token Owner Record account."
+    ],
+    authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance authority (or its delegate)."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates the instructions to cancel the given `proposal`.
 
-  # ## Options
+  ## Options
 
-  # #{NimbleOptions.docs(@cancel_proposal_schema)}
-  # """
-  # def cancel_proposal(opts) do
-  #   case validate(opts, @cancel_proposal_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  #{NimbleOptions.docs(@cancel_proposal_schema)}
+  """
+  def cancel_proposal(opts) do
+    case validate(opts, @cancel_proposal_schema) do
+      {:ok, params} ->
+        %Instruction{
+          program: params.program,
+          accounts: [
+            %Account{key: params.proposal, writable?: true},
+            %Account{key: params.owner_record, writable?: true},
+            %Account{key: params.authority, signer?: true},
+            %Account{key: clock()},
+            %Account{key: params.governance}
+          ],
+          data: Instruction.encode_data([11])
+        }
+
+      error ->
+        error
+    end
+  end
 
   # @sign_off_proposal_schema [
   # ]
@@ -1604,6 +1634,9 @@ defmodule Solana.SPL.Governance do
   #       error
   #   end
   # end
+
+  # TODO replace with with Solana.clock() once `solana` package is updated
+  defp clock(), do: Solana.pubkey!("SysvarC1ock11111111111111111111111111111111")
 
   defp unary(condition), do: if(condition, do: 1, else: 0)
 
