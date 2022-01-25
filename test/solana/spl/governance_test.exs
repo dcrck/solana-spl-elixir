@@ -41,7 +41,6 @@ defmodule Solana.SPL.GovernanceTest do
         |> Enum.map(fn {:ok, result} -> result end)
 
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
-      {:ok, realm, _} = Key.find_address(["governance", name], program)
 
       create_realm_tx = %Transaction{
         instructions: [
@@ -55,7 +54,6 @@ defmodule Solana.SPL.GovernanceTest do
           Governance.create_realm(
             payer: pubkey!(payer),
             authority: pubkey!(payer),
-            new: realm,
             community_mint: pubkey!(community_mint),
             program: program,
             name: name,
@@ -76,6 +74,8 @@ defmodule Solana.SPL.GovernanceTest do
           commitment: "confirmed",
           timeout: 1_000
         )
+
+      realm = Governance.find_realm_address(program, name)
 
       assert {:ok, _realm_info} =
                RPC.send(
@@ -107,7 +107,6 @@ defmodule Solana.SPL.GovernanceTest do
         |> Enum.map(fn {:ok, result} -> result end)
 
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
-      {:ok, realm, _} = Key.find_address(["governance", name], program)
 
       create_realm_tx = %Transaction{
         instructions: [
@@ -123,7 +122,6 @@ defmodule Solana.SPL.GovernanceTest do
           Governance.create_realm(
             payer: pubkey!(payer),
             authority: pubkey!(payer),
-            new: realm,
             community_mint: pubkey!(community_mint),
             council_mint: pubkey!(council_mint),
             program: program,
@@ -145,6 +143,8 @@ defmodule Solana.SPL.GovernanceTest do
           commitment: "confirmed",
           timeout: 1_000
         )
+
+      realm = Governance.find_realm_address(program, name)
 
       assert {:ok, _realm_info} =
                RPC.send(
@@ -181,7 +181,7 @@ defmodule Solana.SPL.GovernanceTest do
         |> Enum.map(fn {:ok, result} -> result end)
 
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
-      {:ok, realm, _} = Key.find_address(["governance", name], program)
+      realm = Governance.find_realm_address(program, name)
 
       deposit_tx = %Transaction{
         instructions: [
@@ -208,7 +208,6 @@ defmodule Solana.SPL.GovernanceTest do
           Governance.create_realm(
             payer: pubkey!(payer),
             authority: pubkey!(payer),
-            new: realm,
             community_mint: pubkey!(community_mint),
             program: program,
             name: name,
@@ -276,7 +275,7 @@ defmodule Solana.SPL.GovernanceTest do
         |> Enum.map(fn {:ok, result} -> result end)
 
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
-      {:ok, realm, _} = Key.find_address(["governance", name], program)
+      realm = Governance.find_realm_address(program, name)
 
       deposit_tx = %Transaction{
         instructions: [
@@ -310,7 +309,6 @@ defmodule Solana.SPL.GovernanceTest do
           Governance.create_realm(
             payer: pubkey!(payer),
             authority: pubkey!(payer),
-            new: realm,
             community_mint: pubkey!(community_mint),
             council_mint: pubkey!(council_mint),
             program: program,
@@ -381,7 +379,7 @@ defmodule Solana.SPL.GovernanceTest do
         |> Enum.map(fn {:ok, result} -> result end)
 
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
-      {:ok, realm, _} = Key.find_address(["governance", name], program)
+      realm = Governance.find_realm_address(program, name)
 
       withdraw_tx = %Transaction{
         instructions: [
@@ -408,7 +406,6 @@ defmodule Solana.SPL.GovernanceTest do
           Governance.create_realm(
             payer: pubkey!(payer),
             authority: pubkey!(payer),
-            new: realm,
             community_mint: pubkey!(community_mint),
             program: program,
             name: name,
@@ -483,7 +480,7 @@ defmodule Solana.SPL.GovernanceTest do
         |> Enum.map(fn {:ok, result} -> result end)
 
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
-      {:ok, realm, _} = Key.find_address(["governance", name], program)
+      realm = Governance.find_realm_address(program, name)
 
       withdraw_tx = %Transaction{
         instructions: [
@@ -517,7 +514,6 @@ defmodule Solana.SPL.GovernanceTest do
           Governance.create_realm(
             payer: pubkey!(payer),
             authority: pubkey!(payer),
-            new: realm,
             community_mint: pubkey!(community_mint),
             council_mint: pubkey!(council_mint),
             program: program,
@@ -595,7 +591,7 @@ defmodule Solana.SPL.GovernanceTest do
         |> Enum.map(fn {:ok, result} -> result end)
 
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
-      {:ok, realm, _} = Key.find_address(["governance", name], program)
+      realm = Governance.find_realm_address(program, name)
 
       delegate_tx = %Transaction{
         instructions: [
@@ -622,7 +618,6 @@ defmodule Solana.SPL.GovernanceTest do
           Governance.create_realm(
             payer: pubkey!(payer),
             authority: pubkey!(payer),
-            new: realm,
             community_mint: pubkey!(community_mint),
             program: program,
             name: name,
@@ -688,7 +683,7 @@ defmodule Solana.SPL.GovernanceTest do
         |> Enum.map(fn {:ok, result} -> result end)
 
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
-      {:ok, realm, _} = Key.find_address(["governance", name], program)
+      realm = Governance.find_realm_address(program, name)
 
       delegate_tx = %Transaction{
         instructions: [
@@ -722,7 +717,6 @@ defmodule Solana.SPL.GovernanceTest do
           Governance.create_realm(
             payer: pubkey!(payer),
             authority: pubkey!(payer),
-            new: realm,
             community_mint: pubkey!(community_mint),
             council_mint: pubkey!(council_mint),
             program: program,
@@ -791,7 +785,7 @@ defmodule Solana.SPL.GovernanceTest do
         |> Enum.map(fn {:ok, result} -> result end)
 
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
-      {:ok, realm, _} = Key.find_address(["governance", name], program)
+      realm = Governance.find_realm_address(program, name)
 
       governance_tx = %Transaction{
         instructions: [
@@ -822,7 +816,6 @@ defmodule Solana.SPL.GovernanceTest do
           Governance.create_realm(
             payer: pubkey!(payer),
             authority: pubkey!(payer),
-            new: realm,
             community_mint: pubkey!(community_mint),
             program: program,
             name: name,
@@ -893,7 +886,7 @@ defmodule Solana.SPL.GovernanceTest do
         |> Enum.map(fn {:ok, result} -> result end)
 
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
-      {:ok, realm, _} = Key.find_address(["governance", name], program)
+      realm = Governance.find_realm_address(program, name)
 
       governance_tx = %Transaction{
         instructions: [
@@ -922,7 +915,6 @@ defmodule Solana.SPL.GovernanceTest do
           Governance.create_realm(
             payer: pubkey!(payer),
             authority: pubkey!(payer),
-            new: realm,
             community_mint: pubkey!(community_mint),
             program: program,
             name: name,
@@ -994,7 +986,7 @@ defmodule Solana.SPL.GovernanceTest do
         |> Enum.map(fn {:ok, result} -> result end)
 
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
-      {:ok, realm, _} = Key.find_address(["governance", name], program)
+      realm = Governance.find_realm_address(program, name)
 
       governance_tx = %Transaction{
         instructions: [
@@ -1025,7 +1017,6 @@ defmodule Solana.SPL.GovernanceTest do
           Governance.create_realm(
             payer: pubkey!(payer),
             authority: pubkey!(payer),
-            new: realm,
             community_mint: pubkey!(community_mint),
             program: program,
             name: name,
@@ -1097,7 +1088,7 @@ defmodule Solana.SPL.GovernanceTest do
         |> Enum.map(fn {:ok, result} -> result end)
 
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
-      {:ok, realm, _} = Key.find_address(["governance", name], program)
+      realm = Governance.find_realm_address(program, name)
 
       governance_tx = %Transaction{
         instructions: [
@@ -1128,7 +1119,6 @@ defmodule Solana.SPL.GovernanceTest do
           Governance.create_realm(
             payer: pubkey!(payer),
             authority: pubkey!(payer),
-            new: realm,
             community_mint: pubkey!(community_mint),
             program: program,
             name: name,

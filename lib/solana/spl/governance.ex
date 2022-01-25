@@ -25,6 +25,14 @@ defmodule Solana.SPL.Governance do
   def test_id(), do: Solana.pubkey!("GTesTBiEWE32WHXXE2S4XbZvA5CrEc4xs6ZgRe895dP")
 
   @doc """
+  Finds the realm address for the given `name`. Should have the seeds `['governance', name]`
+  """
+  @spec find_realm_address(program :: Key.t(), name :: String.t()) :: Key.t()
+  def find_realm_address(program, name) do
+    maybe_return_found_address(["governance", name], program)
+  end
+
+  @doc """
   Finds a token holding address for the given community/council `mint`. Should
   have the seeds: `['governance', realm, mint]`.
   """
@@ -142,37 +150,22 @@ defmodule Solana.SPL.Governance do
       required: true,
       doc: "Public key of the authority account for the `new` realm."
     ],
-    new: [
-      type: {:custom, Key, :check, []},
-      required: true,
-      doc: """
-      Public key of the newly-created realm account. Should be a program-derived
-      address with the seeds `['governance', name]`.
-      """
-    ],
     community_mint: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "Community token mint for the `new` realm."
+      doc: "Community token mint for the new realm."
     ],
     council_mint: [
       type: {:custom, Key, :check, []},
-      doc: "Community token mint for the `new` realm."
-    ],
-    addin: [
-      type: {:custom, Key, :check, []},
-      doc: "Community voter weight add-in program ID."
+      doc: "Community token mint for the new realm."
     ],
     program: [
       type: {:custom, Key, :check, []},
       required: true,
       doc: "Public key of the governance program instance to use."
     ],
-    name: [
-      type: :string,
-      required: true,
-      doc: "The name of the `new` realm to create."
-    ],
+    addin: [type: {:custom, Key, :check, []}, doc: "Community voter weight add-in program ID."],
+    name: [type: :string, required: true, doc: "The name of the new realm."],
     max_vote_weight_source: [
       type: {:custom, __MODULE__, :validate_max_vote_weight_source, []},
       required: true,
@@ -197,23 +190,22 @@ defmodule Solana.SPL.Governance do
   """
   def create_realm(opts) do
     case validate(opts, @create_realm_schema) do
-      {:ok, params} ->
+      {:ok, %{program: program, name: name} = params} ->
+        realm = find_realm_address(program, name)
+
         %Instruction{
-          program: params.program,
+          program: program,
           accounts:
             List.flatten([
-              create_realm_accounts(Map.pop(params, :council_mint)),
-              %Account{
-                key: find_realm_config_address(params.program, params.new),
-                writable?: true
-              }
-              | maybe_add_voter_weight_addin(params)
+              create_realm_accounts(Map.pop(params, :council_mint), realm),
+              %Account{key: find_realm_config_address(program, realm), writable?: true},
+              maybe_add_voter_weight_addin(params)
             ]),
           data:
             Instruction.encode_data([
               0,
-              {byte_size(params.name), 32},
-              params.name,
+              {byte_size(name), 32},
+              name,
               if(Map.has_key?(params, :council_mint), do: 1, else: 0),
               {params.minimum, 64},
               Enum.find_index(
@@ -230,12 +222,12 @@ defmodule Solana.SPL.Governance do
     end
   end
 
-  defp create_realm_accounts({nil, %{new: new, community_mint: mint} = params}) do
+  defp create_realm_accounts({nil, %{community_mint: mint} = params}, realm) do
     [
-      %Account{key: new, writable?: true},
+      %Account{key: realm, writable?: true},
       %Account{key: params.authority},
       %Account{key: mint},
-      %Account{key: find_holding_address(params.program, new, mint), writable?: true},
+      %Account{key: find_holding_address(params.program, realm, mint), writable?: true},
       %Account{key: params.payer, signer?: true},
       %Account{key: SystemProgram.id()},
       %Account{key: Token.id()},
@@ -243,11 +235,11 @@ defmodule Solana.SPL.Governance do
     ]
   end
 
-  defp create_realm_accounts({mint, params}) do
+  defp create_realm_accounts({mint, params}, realm) do
     List.flatten([
-      create_realm_accounts({nil, params}),
+      create_realm_accounts({nil, params}, realm),
       %Account{key: mint},
-      %Account{key: find_holding_address(params.program, params.new, mint), writable?: true}
+      %Account{key: find_holding_address(params.program, realm, mint), writable?: true}
     ])
   end
 
