@@ -96,6 +96,21 @@ defmodule Solana.SPL.Governance do
     maybe_return_found_address(["token-governance", realm, token], program)
   end
 
+  @doc """
+  Finds the `governance` proposal address for the given `mint` and `index`.
+  Should have the seeds: `['governance', governance, mint, index]`.
+  """
+  @spec find_proposal_address(
+          program :: Key.t(),
+          governance :: Key.t(),
+          mint :: Key.t(),
+          index :: integer
+        ) ::
+          Key.t()
+  def find_proposal_address(program, governance, mint, index) do
+    maybe_return_found_address(["governance", governance, mint, <<index::size(32)>>], program)
+  end
+
   defp maybe_return_found_address(seeds, program) do
     case Key.find_address(seeds, program) do
       {:ok, address, _} -> address
@@ -599,7 +614,7 @@ defmodule Solana.SPL.Governance do
     payer: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "The account which will pay for the new Account Governance account's creation."
+      doc: "The account which will pay for the new Program Governance account's creation."
     ],
     owner: [
       type: {:custom, Key, :check, []},
@@ -712,7 +727,7 @@ defmodule Solana.SPL.Governance do
     payer: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "The account which will pay for the new Account Governance account's creation."
+      doc: "The account which will pay for the new Mint Governance account's creation."
     ],
     owner: [
       type: {:custom, Key, :check, []},
@@ -811,6 +826,7 @@ defmodule Solana.SPL.Governance do
               ])
             )
         }
+
       error ->
         error
     end
@@ -820,7 +836,7 @@ defmodule Solana.SPL.Governance do
     payer: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "The account which will pay for the new Account Governance account's creation."
+      doc: "The account which will pay for the new Token Governance account's creation."
     ],
     owner: [
       type: {:custom, Key, :check, []},
@@ -919,6 +935,7 @@ defmodule Solana.SPL.Governance do
               ])
             )
         }
+
       error ->
         error
     end
@@ -936,6 +953,141 @@ defmodule Solana.SPL.Governance do
       {config.minimum_council, 64}
     ]
   end
+
+  @create_proposal_schema [
+    payer: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The account which will pay for the new Proposal's account's creation."
+    ],
+    owner: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the token owner who is making the propsal."
+    ],
+    authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance authority."
+    ],
+    mint: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The governing token mint."
+    ],
+    governance: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The governance account for which this proposal is made."
+    ],
+    realm: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the realm the created Governance belongs to."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ],
+    voter_weight_record: [
+      type: {:custom, Key, :check, []},
+      doc: "Public key of the voter weight record account."
+    ],
+    name: [type: :string, required: true, doc: "The proposal name."],
+    description: [type: :string, required: true, doc: "The proposal explanation."],
+    vote_type: [
+      type: {:custom, __MODULE__, :validate_vote_type, []},
+      required: true,
+      doc: "The proposal's vote type."
+    ],
+    options: [type: {:list, :string}, required: true, doc: "Proposal options."],
+    has_deny_option?: [
+      type: :boolean,
+      default: true,
+      doc: """
+      Indicates whether this proposal has a 'deny' option. Must be `true` if the
+      proposal wants to include executable instructions.
+      """
+    ],
+    index: [
+      type: :non_neg_integer,
+      required: true,
+      doc: "The proposal index, i.e. this is the Nth proposal for this governance."
+    ]
+  ]
+  @doc """
+  Generates instructions which create a Proposal account.
+
+  Proposals allow governance token owners to propose governance changes (i.e.
+  instructions) to an account that will go into effect (i.e. be executed) at
+  some point in the future.
+
+  ## Options
+
+  #{NimbleOptions.docs(@create_proposal_schema)}
+  """
+  def create_proposal(opts) do
+    case validate(opts, @create_proposal_schema) do
+      {:ok, %{vote_type: {:multiple, n}, options: options}} when n > length(options) ->
+        {:error, "number of choices greater than options available"}
+
+      {:ok, %{program: program, realm: realm, governance: governance, owner: owner} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: realm},
+            %Account{
+              key: find_proposal_address(program, governance, params.mint, params.index),
+              writable?: true
+            },
+            %Account{key: governance, writable?: true},
+            %Account{
+              key: find_owner_record_address(program, realm, params.mint, owner),
+              writable?: true
+            },
+            %Account{key: params.mint},
+            %Account{key: params.authority, signer?: true},
+            %Account{key: params.payer, signer?: true},
+            %Account{key: SystemProgram.id()},
+            %Account{key: Solana.rent()},
+            %Account{key: clock()}
+            | voter_weight_accounts(params)
+          ],
+          data:
+            Instruction.encode_data(
+              List.flatten([
+                6,
+                encode_string(params.name),
+                encode_string(params.description),
+                encode_vote_type(params.vote_type),
+                {length(params.options), 32},
+                Enum.map(params.options, &encode_string/1),
+                if(params.has_deny_option?, do: 1, else: 0)
+              ])
+            )
+        }
+
+      error ->
+        error
+    end
+  end
+
+  # TODO replace with with Solana.clock() once `solana` package is updated
+  defp clock(), do: Solana.pubkey!("SysvarC1ock11111111111111111111111111111111")
+
+  def validate_vote_type(:single), do: {:ok, :single}
+  def validate_vote_type({:multiple, n}) when is_integer(n) and n > 0, do: {:ok, {:multiple, n}}
+
+  def validate_vote_type(other) do
+    {:error, "expected :single or {:multiple, n}, got: #{inspect(other)}"}
+  end
+
+  # TODO replace with {str, "borsh"} once `solana` package is updated
+  defp encode_string(str), do: [{byte_size(str), 32}, str]
+
+  defp encode_vote_type(:single), do: [0]
+  defp encode_vote_type({:multiple, n}), do: [1, {n, 16}]
 
   defp voter_weight_accounts(%{voter_weight_record: record, realm: realm, program: program}) do
     [%Account{key: find_realm_config_address(program, realm)}, %Account{key: record}]
