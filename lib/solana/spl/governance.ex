@@ -1419,23 +1419,50 @@ defmodule Solana.SPL.Governance do
     end
   end
 
-  # @sign_off_proposal_schema [
-  # ]
-  # @doc """
+  @sign_off_proposal_schema [
+    proposal: [type: {:custom, Key, :check, []}, required: true, doc: "The proposal account."],
+    signatory: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "the signatory signing off on the `proposal`."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates the instructions for a `signatory` to sign off on a `proposal`.
 
-  # ## Options
+  This indicates the `signatory` approves of the `proposal`. When the last
+  `signatory` signs off, the `proposal` moves to the Voting state.
 
-  # #{NimbleOptions.docs(@sign_off_proposal_schema)}
-  # """
-  # def sign_off_proposal(opts) do
-  #   case validate(opts, @sign_off_proposal_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  ## Options
+
+  #{NimbleOptions.docs(@sign_off_proposal_schema)}
+  """
+  def sign_off_proposal(opts) do
+    case validate(opts, @sign_off_proposal_schema) do
+      {:ok, %{program: program, signatory: signatory, proposal: proposal}} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: proposal, writable?: true},
+            %Account{
+              key: find_signatory_record_address(program, proposal, signatory),
+              writable?: true
+            },
+            %Account{key: signatory, signer?: true},
+            %Account{key: clock()}
+          ],
+          data: Instruction.encode_data([12])
+        }
+
+      error ->
+        error
+    end
+  end
 
   # @cast_vote_schema [
   # ]
