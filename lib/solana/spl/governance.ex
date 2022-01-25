@@ -1170,7 +1170,8 @@ defmodule Solana.SPL.Governance do
     beneficiary: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "Public key of the account to receive the disposed signatory record account's lamports."
+      doc:
+        "Public key of the account to receive the disposed signatory record account's lamports."
     ],
     program: [
       type: {:custom, Key, :check, []},
@@ -1202,6 +1203,7 @@ defmodule Solana.SPL.Governance do
           ],
           data: Instruction.encode_data([8, signatory])
         }
+
       error ->
         error
     end
@@ -1258,7 +1260,7 @@ defmodule Solana.SPL.Governance do
   Generates the instructions to insert an instruction into the proposal at the
   given `index`.
 
-  New instructions must be inserrrted at the end of the range indicated by the
+  New instructions must be inserted at the end of the range indicated by the
   proposal's `instruction_next_index` property. If an instruction replaces an
   existing Instruction at a given `index`, the old one must first be removed by
   calling `Solana.SPL.Governance.remove_instruction/1`.
@@ -1282,14 +1284,16 @@ defmodule Solana.SPL.Governance do
             %Account{key: SystemProgram.id()},
             %Account{key: Solana.rent()}
           ],
-          data: Instruction.encode_data([
-            9,
-            {params.option_index, 16},
-            {index, 16},
-            {params.delay, 32} |
-            ix_data(params.instruction)
-          ])
+          data:
+            Instruction.encode_data([
+              9,
+              {params.option_index, 16},
+              {index, 16},
+              {params.delay, 32}
+              | ix_data(params.instruction)
+            ])
         }
+
       error ->
         error
     end
@@ -1299,7 +1303,7 @@ defmodule Solana.SPL.Governance do
   def validate_instruction(%Instruction{} = ix), do: {:ok, ix}
 
   def validate_instruction(other) do
-    {:error, "expected a Solana.Instruction, got: #{inspect other}"}
+    {:error, "expected a Solana.Instruction, got: #{inspect(other)}"}
   end
 
   defp ix_data(%Instruction{} = ix) do
@@ -1316,23 +1320,56 @@ defmodule Solana.SPL.Governance do
     [account.key, unary(account.signer?), unary(account.writable?)]
   end
 
-  # @remove_instruction_schema [
-  # ]
-  # @doc """
+  @remove_instruction_schema [
+    proposal: [type: {:custom, Key, :check, []}, required: true, doc: "The proposal account."],
+    owner_record: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the `proposal` owner's Token Owner Record account."
+    ],
+    authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance authority (or its delegate)."
+    ],
+    beneficiary: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the account to receive the disposed instruction account's lamports."
+    ],
+    index: [
+      type: :non_neg_integer,
+      required: true,
+      doc: "index the `instruction` will be removed from."
+    ]
+  ]
+  @doc """
+  Generates the instructions to remove the Instruction data at the given `index`
+  from the given `proposal`.
 
-  # ## Options
+  ## Options
 
-  # #{NimbleOptions.docs(@remove_instruction_schema)}
-  # """
-  # def remove_instruction(opts) do
-  #   case validate(opts, @remove_instruction_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  #{NimbleOptions.docs(@remove_instruction_schema)}
+  """
+  def remove_instruction(opts) do
+    case validate(opts, @remove_instruction_schema) do
+      {:ok, %{program: program, proposal: proposal, index: index} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: proposal, writable?: true},
+            %Account{key: params.owner_record},
+            %Account{key: params.authority, signer?: true},
+            %Account{key: find_instruction_address(program, proposal, index), writable?: true},
+            %Account{key: params.beneficiary, writable?: true}
+          ],
+          data: Instruction.encode_data([10])
+        }
+
+      error ->
+        error
+    end
+  end
 
   # @cancel_proposal_schema [
   # ]
