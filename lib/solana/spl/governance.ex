@@ -132,6 +132,19 @@ defmodule Solana.SPL.Governance do
     maybe_return_found_address(["governance", proposal, signatory], program)
   end
 
+  @doc """
+  Finds the `proposal`'s instruction address for index `index`. Should have the
+  seeds: `['governance', proposal, index]`.
+  """
+  @spec find_instruction_address(
+          program :: Key.t(),
+          proposal :: Key.t(),
+          index :: non_neg_integer
+        ) :: Key.t()
+  def find_instruction_address(program, proposal, index) do
+    maybe_return_found_address(["governance", proposal, <<index::size(16)>>], program)
+  end
+
   defp maybe_return_found_address(seeds, program) do
     case Key.find_address(seeds, program) do
       {:ok, address, _} -> address
@@ -206,14 +219,14 @@ defmodule Solana.SPL.Governance do
               0,
               {byte_size(name), 32},
               name,
-              if(Map.has_key?(params, :council_mint), do: 1, else: 0),
+              unary(Map.has_key?(params, :council_mint)),
               {params.minimum, 64},
               Enum.find_index(
                 @max_vote_weight_sources,
                 &(&1 == elem(params.max_vote_weight_source, 0))
               ),
               {elem(params.max_vote_weight_source, 1), 64},
-              if(Map.has_key?(params, :addin), do: 1, else: 0)
+              unary(Map.has_key?(params, :addin))
             ])
         }
 
@@ -697,7 +710,7 @@ defmodule Solana.SPL.Governance do
               List.flatten([
                 5,
                 serialize_config(params.config),
-                if(params.transfer_upgrade_authority?, do: 1, else: 0)
+                unary(params.transfer_upgrade_authority?)
               ])
             )
         }
@@ -804,7 +817,7 @@ defmodule Solana.SPL.Governance do
               List.flatten([
                 17,
                 serialize_config(params.config),
-                if(params.transfer_mint_authority?, do: 1, else: 0)
+                unary(params.transfer_mint_authority?)
               ])
             )
         }
@@ -908,7 +921,7 @@ defmodule Solana.SPL.Governance do
               List.flatten([
                 18,
                 serialize_config(params.config),
-                if(params.transfer_ownership?, do: 1, else: 0)
+                unary(params.transfer_ownership?)
               ])
             )
         }
@@ -1040,7 +1053,7 @@ defmodule Solana.SPL.Governance do
                 encode_vote_type(params.vote_type),
                 {length(params.options), 32},
                 Enum.map(params.options, &encode_string/1),
-                if(params.has_deny_option?, do: 1, else: 0)
+                unary(params.has_deny_option?)
               ])
             )
         }
@@ -1080,7 +1093,7 @@ defmodule Solana.SPL.Governance do
     authority: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "Public key of the governance authority."
+      doc: "Public key of the governance authority (or its delegate)."
     ],
     payer: [
       type: {:custom, Key, :check, []},
@@ -1133,41 +1146,175 @@ defmodule Solana.SPL.Governance do
     end
   end
 
-  # @remove_signatory_schema [
-  # ]
-  # @doc """
+  @remove_signatory_schema [
+    proposal: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "proposal account to add the `signatory` to."
+    ],
+    signatory: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "the signatory to add to the `proposal`."
+    ],
+    authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance authority (or its delegate)."
+    ],
+    owner_record: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the `proposal` owner's Token Owner Record account."
+    ],
+    beneficiary: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the account to receive the disposed signatory record account's lamports."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates the instructions to remove a `signatory` from the `proposal`.
 
-  # ## Options
+  ## Options
 
-  # #{NimbleOptions.docs(@remove_signatory_schema)}
-  # """
-  # def remove_signatory(opts) do
-  #   case validate(opts, @remove_signatory_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  #{NimbleOptions.docs(@remove_signatory_schema)}
+  """
+  def remove_signatory(opts) do
+    case validate(opts, @remove_signatory_schema) do
+      {:ok, %{program: program, proposal: proposal, signatory: signatory} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: proposal, writable?: true},
+            %Account{key: params.owner_record},
+            %Account{key: params.authority, signer?: true},
+            %Account{
+              key: find_signatory_record_address(program, proposal, signatory),
+              writable?: true
+            },
+            %Account{key: params.beneficiary, writable?: true}
+          ],
+          data: Instruction.encode_data([8, signatory])
+        }
+      error ->
+        error
+    end
+  end
 
-  # @insert_instruction_schema [
-  # ]
-  # @doc """
+  @insert_instruction_schema [
+    governance: [type: {:custom, Key, :check, []}, required: true, doc: "The governance account."],
+    proposal: [type: {:custom, Key, :check, []}, required: true, doc: "The proposal account."],
+    owner_record: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the `proposal` owner's Token Owner Record account."
+    ],
+    authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance authority (or its delegate)."
+    ],
+    payer: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The account which will pay for the ProposalInstruction account's creation."
+    ],
+    option: [
+      type: :non_neg_integer,
+      default: 0,
+      doc: "The index of the option the instruction is for."
+    ],
+    index: [
+      type: :non_neg_integer,
+      required: true,
+      doc: "index the `instruction` will be inserted at."
+    ],
+    delay: [
+      type: :non_neg_integer,
+      default: 0,
+      doc: """
+      Wait time (in seconds) between the vote period ending and the
+      `instruction` being eligible for execution.
+      """
+    ],
+    instruction: [
+      type: {:custom, __MODULE__, :validate_instruction, []},
+      required: true,
+      doc: "Data for the instruction to be executed"
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates the instructions to insert an instruction into the proposal at the
+  given `index`.
 
-  # ## Options
+  New instructions must be inserrrted at the end of the range indicated by the
+  proposal's `instruction_next_index` property. If an instruction replaces an
+  existing Instruction at a given `index`, the old one must first be removed by
+  calling `Solana.SPL.Governance.remove_instruction/1`.
 
-  # #{NimbleOptions.docs(@insert_instruction_schema)}
-  # """
-  # def insert_instruction(opts) do
-  #   case validate(opts, @insert_instruction_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  ## Options
+
+  #{NimbleOptions.docs(@insert_instruction_schema)}
+  """
+  def insert_instruction(opts) do
+    case validate(opts, @insert_instruction_schema) do
+      {:ok, %{program: program, proposal: proposal, index: index} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: params.governance},
+            %Account{key: proposal, writable?: true},
+            %Account{key: params.owner_record},
+            %Account{key: params.authority, signer?: true},
+            %Account{key: find_instruction_address(program, proposal, index), writable?: true},
+            %Account{key: params.payer, signer?: true},
+            %Account{key: SystemProgram.id()},
+            %Account{key: Solana.rent()}
+          ],
+          data: Instruction.encode_data([
+            9,
+            {params.option_index, 16},
+            {index, 16},
+            {params.delay, 32} |
+            ix_data(params.instruction)
+          ])
+        }
+      error ->
+        error
+    end
+  end
+
+  @doc false
+  def validate_instruction(%Instruction{} = ix), do: {:ok, ix}
+
+  def validate_instruction(other) do
+    {:error, "expected a Solana.Instruction, got: #{inspect other}"}
+  end
+
+  defp ix_data(%Instruction{} = ix) do
+    [
+      ix.program,
+      {length(ix.accounts), 32},
+      Enum.map(ix.accounts, &account_data/1),
+      {byte_size(ix.data), 32},
+      ix.data
+    ]
+  end
+
+  defp account_data(%Account{} = account) do
+    [account.key, unary(account.signer?), unary(account.writable?)]
+  end
 
   # @remove_instruction_schema [
   # ]
@@ -1420,6 +1567,8 @@ defmodule Solana.SPL.Governance do
   #       error
   #   end
   # end
+
+  defp unary(condition), do: if(condition, do: 1, else: 0)
 
   defp voter_weight_accounts(%{voter_weight_record: record, realm: realm, program: program}) do
     [%Account{key: find_realm_config_address(program, realm)}, %Account{key: record}]
