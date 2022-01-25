@@ -416,15 +416,10 @@ defmodule Solana.SPL.Governance do
       required: true,
       doc: "The current non-delegated holder of voting rights within the `realm`."
     ],
-    realm: [
+    record: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "Public key of the realm for which the `owner` will delegate voter rights."
-    ],
-    mint: [
-      type: {:custom, Key, :check, []},
-      required: true,
-      doc: "The mint for the token for which the `owner` will delegate voter rights."
+      doc: "The Token Owner Record account for which the `owner` wishes to delegate rights."
     ],
     to: [
       type: {:custom, Key, :check, []},
@@ -454,15 +449,12 @@ defmodule Solana.SPL.Governance do
   """
   def delegate(opts) do
     case validate(opts, @delegate_schema) do
-      {:ok, %{program: program, realm: realm, mint: mint, owner: owner} = params} ->
+      {:ok, params} ->
         %Instruction{
-          program: program,
+          program: params.program,
           accounts: [
-            %Account{key: owner, signer?: true},
-            %Account{
-              key: find_owner_record_address(program, realm, mint, owner),
-              writable?: true
-            }
+            %Account{key: params.owner, signer?: true},
+            %Account{key: params.record, writable?: true}
           ],
           data: Instruction.encode_data([3 | delegate_data(params)])
         }
@@ -534,10 +526,10 @@ defmodule Solana.SPL.Governance do
       required: true,
       doc: "The account which will pay for the new Account Governance account's creation."
     ],
-    owner: [
+    owner_record: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "Public key of the token owner which will govern the account."
+      doc: "The address of the governing Token Owner Record."
     ],
     authority: [
       type: {:custom, Key, :check, []},
@@ -548,11 +540,6 @@ defmodule Solana.SPL.Governance do
       type: {:custom, Key, :check, []},
       required: true,
       doc: "Public key of the realm the created Governance belongs to."
-    ],
-    mint: [
-      type: {:custom, Key, :check, []},
-      required: true,
-      doc: "The mint for the token the `owner` will use to create the governance account."
     ],
     governed: [
       type: {:custom, Key, :check, []},
@@ -590,7 +577,7 @@ defmodule Solana.SPL.Governance do
   """
   def create_account_governance(opts) do
     case validate(opts, @create_account_governance_schema) do
-      {:ok, %{program: program, realm: realm, governed: governed, owner: owner} = params} ->
+      {:ok, %{program: program, realm: realm, governed: governed} = params} ->
         %Instruction{
           program: program,
           accounts: [
@@ -600,7 +587,7 @@ defmodule Solana.SPL.Governance do
               writable?: true
             },
             %Account{key: governed},
-            %Account{key: find_owner_record_address(program, realm, params.mint, owner)},
+            %Account{key: params.owner_record},
             %Account{key: params.payer, signer?: true},
             %Account{key: SystemProgram.id()},
             %Account{key: Solana.rent()},
@@ -621,10 +608,10 @@ defmodule Solana.SPL.Governance do
       required: true,
       doc: "The account which will pay for the new Program Governance account's creation."
     ],
-    owner: [
+    owner_record: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "Public key of the token owner which will govern the account."
+      doc: "The address of the governing Token Owner Record."
     ],
     authority: [
       type: {:custom, Key, :check, []},
@@ -635,11 +622,6 @@ defmodule Solana.SPL.Governance do
       type: {:custom, Key, :check, []},
       required: true,
       doc: "Public key of the realm the created Governance belongs to."
-    ],
-    mint: [
-      type: {:custom, Key, :check, []},
-      required: true,
-      doc: "The mint for the token the `owner` will use to create the governance account."
     ],
     governed: [
       type: {:custom, Key, :check, []},
@@ -690,7 +672,7 @@ defmodule Solana.SPL.Governance do
   """
   def create_program_governance(opts) do
     case validate(opts, @create_program_governance_schema) do
-      {:ok, %{program: program, realm: realm, governed: governed, owner: owner} = params} ->
+      {:ok, %{program: program, realm: realm, governed: governed} = params} ->
         %Instruction{
           program: program,
           accounts: [
@@ -702,7 +684,7 @@ defmodule Solana.SPL.Governance do
             %Account{key: governed},
             %Account{key: find_program_data(program), writable?: true},
             %Account{key: params.upgrade_authority, signer?: true},
-            %Account{key: find_owner_record_address(program, realm, params.mint, owner)},
+            %Account{key: params.owner_record},
             %Account{key: params.payer, signer?: true},
             %Account{key: bpf_loader()},
             %Account{key: SystemProgram.id()},
@@ -734,10 +716,10 @@ defmodule Solana.SPL.Governance do
       required: true,
       doc: "The account which will pay for the new Mint Governance account's creation."
     ],
-    owner: [
+    owner_record: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "Public key of the token owner which will govern the account."
+      doc: "The address of the governing Token Owner Record."
     ],
     authority: [
       type: {:custom, Key, :check, []},
@@ -749,11 +731,6 @@ defmodule Solana.SPL.Governance do
       required: true,
       doc: "Public key of the realm the created Governance belongs to."
     ],
-    mint: [
-      type: {:custom, Key, :check, []},
-      required: true,
-      doc: "The mint for the token the `owner` will use to create the governance account."
-    ],
     governed: [
       type: {:custom, Key, :check, []},
       required: true,
@@ -762,7 +739,7 @@ defmodule Solana.SPL.Governance do
     mint_authority: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "The current mint authority of the `goverened` mint."
+      doc: "The current mint authority of the `mint` to be governed."
     ],
     program: [
       type: {:custom, Key, :check, []},
@@ -803,18 +780,18 @@ defmodule Solana.SPL.Governance do
   """
   def create_mint_governance(opts) do
     case validate(opts, @create_mint_governance_schema) do
-      {:ok, %{program: program, realm: realm, governed: governed, owner: owner} = params} ->
+      {:ok, %{program: program, realm: realm, governed: mint} = params} ->
         %Instruction{
           program: program,
           accounts: [
             %Account{key: realm},
             %Account{
-              key: find_mint_governance_address(program, realm, governed),
+              key: find_mint_governance_address(program, realm, mint),
               writable?: true
             },
-            %Account{key: governed, writable?: true},
+            %Account{key: mint, writable?: true},
             %Account{key: params.mint_authority, signer?: true},
-            %Account{key: find_owner_record_address(program, realm, params.mint, owner)},
+            %Account{key: params.owner_record},
             %Account{key: params.payer, signer?: true},
             %Account{key: Token.id()},
             %Account{key: SystemProgram.id()},
@@ -843,10 +820,10 @@ defmodule Solana.SPL.Governance do
       required: true,
       doc: "The account which will pay for the new Token Governance account's creation."
     ],
-    owner: [
+    owner_record: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "Public key of the token owner which will govern the account."
+      doc: "The address of the governing Token Owner Record."
     ],
     authority: [
       type: {:custom, Key, :check, []},
@@ -858,17 +835,12 @@ defmodule Solana.SPL.Governance do
       required: true,
       doc: "Public key of the realm the created Governance belongs to."
     ],
-    mint: [
-      type: {:custom, Key, :check, []},
-      required: true,
-      doc: "The mint for the token the `owner` will use to create the governance account."
-    ],
     governed: [
       type: {:custom, Key, :check, []},
       required: true,
       doc: "The account which will be goverened by the newly created governance."
     ],
-    token_owner: [
+    owner: [
       type: {:custom, Key, :check, []},
       required: true,
       doc: "The current owner of the `goverened` token account."
@@ -893,7 +865,7 @@ defmodule Solana.SPL.Governance do
       #{NimbleOptions.docs(@governance_config_schema)}
       """
     ],
-    transfer_token_owner?: [
+    transfer_ownership?: [
       type: :boolean,
       default: false,
       doc: """
@@ -912,7 +884,7 @@ defmodule Solana.SPL.Governance do
   """
   def create_token_governance(opts) do
     case validate(opts, @create_token_governance_schema) do
-      {:ok, %{program: program, realm: realm, governed: governed, owner: owner} = params} ->
+      {:ok, %{program: program, realm: realm, governed: governed} = params} ->
         %Instruction{
           program: program,
           accounts: [
@@ -922,8 +894,8 @@ defmodule Solana.SPL.Governance do
               writable?: true
             },
             %Account{key: governed, writable?: true},
-            %Account{key: params.token_owner, signer?: true},
-            %Account{key: find_owner_record_address(program, realm, params.mint, owner)},
+            %Account{key: params.owner, signer?: true},
+            %Account{key: params.owner_record},
             %Account{key: params.payer, signer?: true},
             %Account{key: Token.id()},
             %Account{key: SystemProgram.id()},
@@ -936,7 +908,7 @@ defmodule Solana.SPL.Governance do
               List.flatten([
                 18,
                 serialize_config(params.config),
-                if(params.transfer_token_owner?, do: 1, else: 0)
+                if(params.transfer_ownership?, do: 1, else: 0)
               ])
             )
         }

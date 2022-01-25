@@ -593,6 +593,14 @@ defmodule Solana.SPL.GovernanceTest do
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
       realm = Governance.find_realm_address(program, name)
 
+      owner_record =
+        Governance.find_owner_record_address(
+          program,
+          realm,
+          pubkey!(community_mint),
+          pubkey!(payer)
+        )
+
       delegate_tx = %Transaction{
         instructions: [
           Token.Mint.init(
@@ -636,8 +644,7 @@ defmodule Solana.SPL.GovernanceTest do
           ),
           Governance.delegate(
             owner: pubkey!(payer),
-            realm: realm,
-            mint: pubkey!(community_mint),
+            record: owner_record,
             to: pubkey!(delegate),
             program: program
           )
@@ -684,6 +691,14 @@ defmodule Solana.SPL.GovernanceTest do
 
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
       realm = Governance.find_realm_address(program, name)
+
+      owner_record =
+        Governance.find_owner_record_address(
+          program,
+          realm,
+          pubkey!(council_mint),
+          pubkey!(payer)
+        )
 
       delegate_tx = %Transaction{
         instructions: [
@@ -736,8 +751,7 @@ defmodule Solana.SPL.GovernanceTest do
           ),
           Governance.delegate(
             owner: pubkey!(payer),
-            realm: realm,
-            mint: pubkey!(council_mint),
+            record: owner_record,
             to: pubkey!(delegate),
             program: program
           )
@@ -787,6 +801,14 @@ defmodule Solana.SPL.GovernanceTest do
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
       realm = Governance.find_realm_address(program, name)
 
+      owner_record =
+        Governance.find_owner_record_address(
+          program,
+          realm,
+          pubkey!(community_mint),
+          pubkey!(payer)
+        )
+
       governance_tx = %Transaction{
         instructions: [
           Token.Mint.init(
@@ -834,10 +856,9 @@ defmodule Solana.SPL.GovernanceTest do
           ),
           Governance.create_account_governance(
             payer: pubkey!(payer),
-            owner: pubkey!(payer),
+            owner_record: owner_record,
             authority: pubkey!(payer),
             realm: realm,
-            mint: pubkey!(community_mint),
             governed: pubkey!(governed),
             program: program,
             config: [threshold: {:yes, 60}, duration: :timer.hours(3)]
@@ -888,6 +909,14 @@ defmodule Solana.SPL.GovernanceTest do
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
       realm = Governance.find_realm_address(program, name)
 
+      owner_record =
+        Governance.find_owner_record_address(
+          program,
+          realm,
+          pubkey!(community_mint),
+          pubkey!(payer)
+        )
+
       governance_tx = %Transaction{
         instructions: [
           Enum.map([community_mint, governed], fn pair ->
@@ -933,10 +962,9 @@ defmodule Solana.SPL.GovernanceTest do
           ),
           Governance.create_mint_governance(
             payer: pubkey!(payer),
-            owner: pubkey!(payer),
+            owner_record: owner_record,
             authority: pubkey!(payer),
             realm: realm,
-            mint: pubkey!(community_mint),
             governed: pubkey!(governed),
             mint_authority: pubkey!(payer),
             program: program,
@@ -988,6 +1016,14 @@ defmodule Solana.SPL.GovernanceTest do
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
       realm = Governance.find_realm_address(program, name)
 
+      owner_record =
+        Governance.find_owner_record_address(
+          program,
+          realm,
+          pubkey!(community_mint),
+          pubkey!(payer)
+        )
+
       governance_tx = %Transaction{
         instructions: [
           Token.Mint.init(
@@ -1035,12 +1071,11 @@ defmodule Solana.SPL.GovernanceTest do
           ),
           Governance.create_token_governance(
             payer: pubkey!(payer),
-            owner: pubkey!(payer),
+            owner_record: owner_record,
             authority: pubkey!(payer),
             realm: realm,
-            mint: pubkey!(community_mint),
             governed: pubkey!(governed),
-            token_owner: pubkey!(payer),
+            owner: pubkey!(payer),
             program: program,
             config: [threshold: {:yes, 60}, duration: :timer.hours(3)]
           )
@@ -1090,6 +1125,14 @@ defmodule Solana.SPL.GovernanceTest do
       name = "realm" <> String.slice(B58.encode58(pubkey!(community_mint)), 0..6)
       realm = Governance.find_realm_address(program, name)
 
+      owner_record =
+        Governance.find_owner_record_address(
+          program,
+          realm,
+          pubkey!(community_mint),
+          pubkey!(payer)
+        )
+
       governance_tx = %Transaction{
         instructions: [
           Token.Mint.init(
@@ -1137,12 +1180,11 @@ defmodule Solana.SPL.GovernanceTest do
           ),
           Governance.create_token_governance(
             payer: pubkey!(payer),
-            owner: pubkey!(payer),
+            owner_record: owner_record,
             authority: pubkey!(payer),
             realm: realm,
-            mint: pubkey!(community_mint),
             governed: pubkey!(governed),
-            token_owner: pubkey!(payer),
+            owner: pubkey!(payer),
             program: program,
             config: [threshold: {:yes, 60}, duration: :timer.hours(3)]
           )
