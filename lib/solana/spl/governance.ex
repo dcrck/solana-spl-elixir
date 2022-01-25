@@ -111,6 +111,19 @@ defmodule Solana.SPL.Governance do
     maybe_return_found_address(["governance", governance, mint, <<index::size(32)>>], program)
   end
 
+  @doc """
+  Finds the `proposal`'s `signatory` record address. Should have the seeds:
+  `['governance', proposal, signatory]`.
+  """
+  @spec find_signatory_record_address(
+          program :: Key.t(),
+          proposal :: Key.t(),
+          signatory :: Key.t()
+        ) :: Key.t()
+  def find_signatory_record_address(program, proposal, signatory) do
+    maybe_return_found_address(["governance", proposal, signatory], program)
+  end
+
   defp maybe_return_found_address(seeds, program) do
     case Key.find_address(seeds, program) do
       {:ok, address, _} -> address
@@ -958,7 +971,7 @@ defmodule Solana.SPL.Governance do
     payer: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "The account which will pay for the new Proposal's account's creation."
+      doc: "The account which will pay for the new Proposal account's creation."
     ],
     owner: [
       type: {:custom, Key, :check, []},
@@ -1088,6 +1101,361 @@ defmodule Solana.SPL.Governance do
 
   defp encode_vote_type(:single), do: [0]
   defp encode_vote_type({:multiple, n}), do: [1, {n, 16}]
+
+  @add_signatory_schema [
+    proposal: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "proposal account to add the `signatory` to."
+    ],
+    signatory: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "the signatory to add to the `proposal`."
+    ],
+    authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance authority."
+    ],
+    payer: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The account which will pay for the new signatory record's creation."
+    ],
+    owner_record: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the `proposal` owner's Token Owner Record account."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates the instructions to add a `signatory` to the `proposal`.
+
+  This means that the `proposal` can't leave Draft state until this `signatory`
+  signs off on it.
+
+  ## Options
+
+  #{NimbleOptions.docs(@add_signatory_schema)}
+  """
+  def add_signatory(opts) do
+    case validate(opts, @add_signatory_schema) do
+      {:ok, %{program: program, proposal: proposal, signatory: signatory} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: proposal, writable?: true},
+            %Account{key: params.owner_record},
+            %Account{key: params.authority, signer?: true},
+            %Account{
+              key: find_signatory_record_address(program, proposal, signatory),
+              writable?: true
+            },
+            %Account{key: params.payer, signer?: true},
+            %Account{key: SystemProgram.id()},
+            %Account{key: Solana.rent()}
+          ],
+          data: Instruction.encode_data([7, signatory])
+        }
+
+      error ->
+        error
+    end
+  end
+
+  # @remove_signatory_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@remove_signatory_schema)}
+  # """
+  # def remove_signatory(opts) do
+  #   case validate(opts, @remove_signatory_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @insert_instruction_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@insert_instruction_schema)}
+  # """
+  # def insert_instruction(opts) do
+  #   case validate(opts, @insert_instruction_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @remove_instruction_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@remove_instruction_schema)}
+  # """
+  # def remove_instruction(opts) do
+  #   case validate(opts, @remove_instruction_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @cancel_proposal_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@cancel_proposal_schema)}
+  # """
+  # def cancel_proposal(opts) do
+  #   case validate(opts, @cancel_proposal_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @sign_off_proposal_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@sign_off_proposal_schema)}
+  # """
+  # def sign_off_proposal(opts) do
+  #   case validate(opts, @sign_off_proposal_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @cast_vote_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@cast_vote_schema)}
+  # """
+  # def cast_vote(opts) do
+  #   case validate(opts, @cast_vote_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @finalize_vote_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@finalize_vote_schema)}
+  # """
+  # def finalize_vote(opts) do
+  #   case validate(opts, @finalize_vote_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @relinquish_vote_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@relinquish_vote_schema)}
+  # """
+  # def relinquish_vote(opts) do
+  #   case validate(opts, @relinquish_vote_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @execute_instruction_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@execute_instruction_schema)}
+  # """
+  # def execute_instruction(opts) do
+  #   case validate(opts, @execute_instruction_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @set_governance_config_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@set_governance_config_schema)}
+  # """
+  # def set_governance_config(opts) do
+  #   case validate(opts, @set_governance_config_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @flag_instruction_error_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@flag_instruction_error_schema)}
+  # """
+  # def flag_instruction_error(opts) do
+  #   case validate(opts, @flag_instruction_error_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @set_realm_authority_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@set_realm_authority_schema)}
+  # """
+  # def set_realm_authority(opts) do
+  #   case validate(opts, @set_realm_authority_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @set_realm_config_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@set_realm_config_schema)}
+  # """
+  # def set_realm_config(opts) do
+  #   case validate(opts, @set_realm_config_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @create_owner_record_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@create_owner_record_schema)}
+  # """
+  # def create_owner_record(opts) do
+  #   case validate(opts, @create_owner_record_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @update_program_metadata_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@update_program_metadata_schema)}
+  # """
+  # def update_program_metadata(opts) do
+  #   case validate(opts, @update_program_metadata_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  # @create_native_treasury_schema [
+  # ]
+  # @doc """
+
+  # ## Options
+
+  # #{NimbleOptions.docs(@create_native_treasury_schema)}
+  # """
+  # def create_native_treasury(opts) do
+  #   case validate(opts, @create_native_treasury_schema) do
+  #     {:ok, params} ->
+  #       %Instruction{
+  #       }
+  #     error ->
+  #       error
+  #   end
+  # end
 
   defp voter_weight_accounts(%{voter_weight_record: record, realm: realm, program: program}) do
     [%Account{key: find_realm_config_address(program, realm)}, %Account{key: record}]
