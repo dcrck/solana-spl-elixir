@@ -1630,28 +1630,76 @@ defmodule Solana.SPL.Governance do
     end
   end
 
-  # @relinquish_vote_schema [
-  #   program: [
-  #     type: {:custom, Key, :check, []},
-  #     required: true,
-  #     doc: "Public key of the governance program instance to use."
-  #   ]
-  # ]
-  # @doc """
+  @relinquish_vote_schema [
+    proposal: [type: {:custom, Key, :check, []}, required: true, doc: "The proposal account."],
+    governance: [type: {:custom, Key, :check, []}, required: true, doc: "The governance account."],
+    owner_record: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the voter's governing Token Owner Record."
+    ],
+    mint: [type: {:custom, Key, :check, []}, required: true, doc: "The governing token mint."],
+    authority: [
+      type: {:custom, Key, :check, []},
+      doc: """
+      Public key of the governance authority (or its delegate). Only required if
+      the proposal is still being voted on.
+      """
+    ],
+    beneficiary: [
+      type: {:custom, Key, :check, []},
+      doc: """
+      Public key of the account to receive the disposed vote record account's
+      lamports. Only required if the proposal is still being voted on.
+      """
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates instructions to relinquish a voter's vote from a proposal.
 
-  # ## Options
+  If the proposal is still being voted on, the voter's weight won't count toward
+  the outcome. If the proposal is already decided, this instruction has no
+  effect on the proposal, but allows voters to prune their outstanding votes in
+  case they want to withdraw governing tokens from the realm.
 
-  # #{NimbleOptions.docs(@relinquish_vote_schema)}
-  # """
-  # def relinquish_vote(opts) do
-  #   case validate(opts, @relinquish_vote_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  ## Options
+
+  #{NimbleOptions.docs(@relinquish_vote_schema)}
+  """
+  def relinquish_vote(opts) do
+    case validate(opts, @relinquish_vote_schema) do
+      {:ok, %{program: program, proposal: proposal, owner_record: owner_record} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: params.governance},
+            %Account{key: proposal, writable?: true},
+            %Account{key: owner_record, writable?: true},
+            %Account{
+              key: find_vote_record_address(program, proposal, owner_record),
+              writable?: true
+            },
+            %Account{key: params.mint}
+            | optional_relinquish_accounts(params)
+          ],
+          data: Instruction.encode_data([15])
+        }
+
+      error ->
+        error
+    end
+  end
+
+  defp optional_relinquish_accounts(%{authority: authority, beneficiary: beneficiary}) do
+    [%Account{key: authority, signer?: true}, %Account{key: beneficiary, writable?: true}]
+  end
+
+  defp optional_relinquish_accounts(_), do: []
 
   # @execute_instruction_schema [
   #   program: [
