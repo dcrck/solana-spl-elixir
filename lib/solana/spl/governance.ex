@@ -25,6 +25,15 @@ defmodule Solana.SPL.Governance do
   def test_id(), do: Solana.pubkey!("GTesTBiEWE32WHXXE2S4XbZvA5CrEc4xs6ZgRe895dP")
 
   @doc """
+  Finds the program metadata address for the given governance program. Should
+  have the seeds: `["metadata"]`
+  """
+  @spec find_metadata_address(program :: Key.t()) :: Key.t()
+  def find_metadata_address(program) do
+    maybe_return_found_address(["metadata"], program)
+  end
+
+  @doc """
   Finds the realm address for the given `name`. Should have the seeds `['governance', name]`
   """
   @spec find_realm_address(program :: Key.t(), name :: String.t()) :: Key.t()
@@ -169,12 +178,12 @@ defmodule Solana.SPL.Governance do
     payer: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "The account which will pay for the `new` realm account's creation."
+      doc: "The account which will pay for the new realm account's creation."
     ],
     authority: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "Public key of the authority account for the `new` realm."
+      doc: "Public key of the authority account for the new realm."
     ],
     community_mint: [
       type: {:custom, Key, :check, []},
@@ -1209,7 +1218,7 @@ defmodule Solana.SPL.Governance do
     payer: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "The account which will pay for the ProposalInstruction account's creation."
+      doc: "The account which will pay for the Proposal Instruction account's creation."
     ],
     option: [
       type: :non_neg_integer,
@@ -1469,7 +1478,7 @@ defmodule Solana.SPL.Governance do
     payer: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "The account which will pay for VoteRecord account's creation."
+      doc: "The account which will pay for the Vote Record account's creation."
     ],
     voter_weight_record: [
       type: {:custom, Key, :check, []},
@@ -1893,7 +1902,7 @@ defmodule Solana.SPL.Governance do
     council_mint: [type: {:custom, Key, :check, []}, doc: "The realm's council token mint."],
     payer: [
       type: {:custom, Key, :check, []},
-      doc: "The account which will pay for Realm Config account's creation."
+      doc: "The account which will pay for the Realm Config account's creation."
     ],
     addin: [type: {:custom, Key, :check, []}, doc: "Community voter weight add-in program ID."],
     program: [
@@ -1997,7 +2006,7 @@ defmodule Solana.SPL.Governance do
     payer: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "The account which will pay for Token Owner Record account's creation."
+      doc: "The account which will pay for the Token Owner Record account's creation."
     ],
     program: [
       type: {:custom, Key, :check, []},
@@ -2040,28 +2049,45 @@ defmodule Solana.SPL.Governance do
     end
   end
 
-  # @update_program_metadata_schema [
-  #   program: [
-  #     type: {:custom, Key, :check, []},
-  #     required: true,
-  #     doc: "Public key of the governance program instance to use."
-  #   ]
-  # ]
-  # @doc """
+  @update_program_metadata_schema [
+    payer: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The account which will pay for the Program Metadata account's creation."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates instructions to update a Program Metadata account.
 
-  # ## Options
+  This dumps information implied by the governance program's code into a
+  persistent account.
 
-  # #{NimbleOptions.docs(@update_program_metadata_schema)}
-  # """
-  # def update_program_metadata(opts) do
-  #   case validate(opts, @update_program_metadata_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  ## Options
+
+  #{NimbleOptions.docs(@update_program_metadata_schema)}
+  """
+  def update_program_metadata(opts) do
+    case validate(opts, @update_program_metadata_schema) do
+      {:ok, params} ->
+        %Instruction{
+          program: params.program,
+          accounts: [
+            %Account{key: find_metadata_address(params.program), writable?: true},
+            %Account{key: params.payer, signer?: true},
+            %Account{key: SystemProgram.id()}
+          ],
+          data: Instruction.encode_data([24])
+        }
+
+      error ->
+        error
+    end
+  end
 
   # @create_native_treasury_schema [
   #   program: [
