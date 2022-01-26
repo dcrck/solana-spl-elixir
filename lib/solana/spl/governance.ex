@@ -1861,28 +1861,57 @@ defmodule Solana.SPL.Governance do
     end
   end
 
-  # @set_realm_authority_schema [
-  #   program: [
-  #     type: {:custom, Key, :check, []},
-  #     required: true,
-  #     doc: "Public key of the governance program instance to use."
-  #   ]
-  # ]
-  # @doc """
+  @set_realm_authority_schema [
+    realm: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The realm account to assign a new authority."
+    ],
+    current: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The current realm authority."
+    ],
+    new: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The new realm authority. Must be one of the realm governances."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ],
+    remove_authority?: [
+      type: :boolean,
+      default: false,
+      doc: "Whether or not to remove the realm authority."
+    ]
+  ]
+  @doc """
+  Generates the instructions to set a new realm authority.
 
-  # ## Options
+  ## Options
 
-  # #{NimbleOptions.docs(@set_realm_authority_schema)}
-  # """
-  # def set_realm_authority(opts) do
-  #   case validate(opts, @set_realm_authority_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  #{NimbleOptions.docs(@set_realm_authority_schema)}
+  """
+  def set_realm_authority(opts) do
+    case validate(opts, @set_realm_authority_schema) do
+      {:ok, params} ->
+        %Instruction{
+          program: params.program,
+          accounts: [
+            %Account{key: params.realm, writable?: true},
+            %Account{key: params.current, signer?: true},
+            %Account{key: params.new}
+          ],
+          data: Instruction.encode_data([21, unary(params.remove_authority?)])
+        }
+
+      error ->
+        error
+    end
+  end
 
   # @set_realm_config_schema [
   #   program: [
