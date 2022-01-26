@@ -65,6 +65,19 @@ defmodule Solana.SPL.Governance do
   end
 
   @doc """
+  Finds the vote record address for the given `proposal` and `owner_record`.
+  Should have the seeds: `['governance', proposal, owner_record]`.
+  """
+  @spec find_vote_record_address(
+          program :: Key.t(),
+          proposal :: Key.t(),
+          owner_record :: Key.t()
+        ) :: Key.t()
+  def find_vote_record_address(program, proposal, owner_record) do
+    maybe_return_found_address(["governance", proposal, owner_record], program)
+  end
+
+  @doc """
   Finds the account governance address for the given `realm` and `account`.
   Should have the seeds: `['account-governance', realm, account]`.
   """
@@ -1464,25 +1477,118 @@ defmodule Solana.SPL.Governance do
     end
   end
 
-  # @cast_vote_schema [
-  # ]
-  # @doc """
+  @cast_vote_schema [
+    realm: [type: {:custom, Key, :check, []}, required: true, doc: "The realm account."],
+    proposal: [type: {:custom, Key, :check, []}, required: true, doc: "The proposal account."],
+    governance: [type: {:custom, Key, :check, []}, required: true, doc: "The governance account."],
+    owner_record: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the `proposal` owner's Token Owner Record account."
+    ],
+    authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance authority (or its delegate)."
+    ],
+    mint: [type: {:custom, Key, :check, []}, required: true, doc: "The governing token mint."],
+    payer: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The account which will pay for VoteRecord account's creation."
+    ],
+    voter_weight_record: [
+      type: {:custom, Key, :check, []},
+      doc: "Public key of the voter weight record account."
+    ],
+    voter: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the voter's governing token account."
+    ],
+    vote: [
+      type: {:list, {:custom, __MODULE__, :validate_vote, []}},
+      required: true,
+      doc: "The user's vote. Passing an empty list indicates proposal rejection."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates the instructions for a token owner to cast a vote on the given
+  `proposal`.
 
-  # ## Options
+  By doing so, the owner indicates they approve or disapprove of running the
+  `proposal`'s set of instructions.
 
-  # #{NimbleOptions.docs(@cast_vote_schema)}
-  # """
-  # def cast_vote(opts) do
-  #   case validate(opts, @cast_vote_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  If this vote causes the proposal to reach a consensus, the instructions can be
+  run after the configured `delay`.
+
+  ## Options
+
+  #{NimbleOptions.docs(@cast_vote_schema)}
+  """
+  def cast_vote(opts) do
+    case validate(opts, @cast_vote_schema) do
+      {:ok, %{program: program, mint: mint, realm: realm, proposal: proposal} = params} ->
+        voter_record = find_owner_record_address(program, realm, mint, params.voter)
+
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: realm},
+            %Account{key: params.governance},
+            %Account{key: proposal, writable?: true},
+            %Account{key: params.owner_record, writable?: true},
+            %Account{key: voter_record, writable?: true},
+            %Account{key: params.authority, signer?: true},
+            %Account{
+              key: find_vote_record_address(program, proposal, voter_record),
+              writable?: true
+            },
+            %Account{key: mint},
+            %Account{key: params.payer, signer?: true},
+            %Account{key: SystemProgram.id()},
+            %Account{key: Solana.rent()},
+            %Account{key: clock()}
+            | voter_weight_accounts(params)
+          ],
+          data:
+            Instruction.encode_data([
+              13 | vote_data(params.vote)
+            ])
+        }
+
+      error ->
+        error
+    end
+  end
+
+  @doc false
+  def validate_vote({rank, weight} = vote) when rank in 0..255 and weight in 0..100,
+    do: {:ok, vote}
+
+  def validate_vote(other), do: {:error, "Expected a {rank, weight} tuple, got #{inspect(other)}"}
+
+  defp vote_data([]), do: [1]
+
+  defp vote_data(votes) do
+    List.flatten([
+      0,
+      {length(votes), 32},
+      Enum.map(votes, &Tuple.to_list/1)
+    ])
+  end
 
   # @finalize_vote_schema [
+  #   program: [
+  #     type: {:custom, Key, :check, []},
+  #     required: true,
+  #     doc: "Public key of the governance program instance to use."
+  #   ]
   # ]
   # @doc """
 
@@ -1501,6 +1607,11 @@ defmodule Solana.SPL.Governance do
   # end
 
   # @relinquish_vote_schema [
+  #   program: [
+  #     type: {:custom, Key, :check, []},
+  #     required: true,
+  #     doc: "Public key of the governance program instance to use."
+  #   ]
   # ]
   # @doc """
 
@@ -1519,6 +1630,11 @@ defmodule Solana.SPL.Governance do
   # end
 
   # @execute_instruction_schema [
+  #   program: [
+  #     type: {:custom, Key, :check, []},
+  #     required: true,
+  #     doc: "Public key of the governance program instance to use."
+  #   ]
   # ]
   # @doc """
 
@@ -1537,6 +1653,11 @@ defmodule Solana.SPL.Governance do
   # end
 
   # @set_governance_config_schema [
+  #   program: [
+  #     type: {:custom, Key, :check, []},
+  #     required: true,
+  #     doc: "Public key of the governance program instance to use."
+  #   ]
   # ]
   # @doc """
 
@@ -1555,6 +1676,11 @@ defmodule Solana.SPL.Governance do
   # end
 
   # @flag_instruction_error_schema [
+  #   program: [
+  #     type: {:custom, Key, :check, []},
+  #     required: true,
+  #     doc: "Public key of the governance program instance to use."
+  #   ]
   # ]
   # @doc """
 
@@ -1573,6 +1699,11 @@ defmodule Solana.SPL.Governance do
   # end
 
   # @set_realm_authority_schema [
+  #   program: [
+  #     type: {:custom, Key, :check, []},
+  #     required: true,
+  #     doc: "Public key of the governance program instance to use."
+  #   ]
   # ]
   # @doc """
 
@@ -1591,6 +1722,11 @@ defmodule Solana.SPL.Governance do
   # end
 
   # @set_realm_config_schema [
+  #   program: [
+  #     type: {:custom, Key, :check, []},
+  #     required: true,
+  #     doc: "Public key of the governance program instance to use."
+  #   ]
   # ]
   # @doc """
 
@@ -1609,6 +1745,11 @@ defmodule Solana.SPL.Governance do
   # end
 
   # @create_owner_record_schema [
+  #   program: [
+  #     type: {:custom, Key, :check, []},
+  #     required: true,
+  #     doc: "Public key of the governance program instance to use."
+  #   ]
   # ]
   # @doc """
 
@@ -1627,6 +1768,11 @@ defmodule Solana.SPL.Governance do
   # end
 
   # @update_program_metadata_schema [
+  #   program: [
+  #     type: {:custom, Key, :check, []},
+  #     required: true,
+  #     doc: "Public key of the governance program instance to use."
+  #   ]
   # ]
   # @doc """
 
@@ -1645,6 +1791,11 @@ defmodule Solana.SPL.Governance do
   # end
 
   # @create_native_treasury_schema [
+  #   program: [
+  #     type: {:custom, Key, :check, []},
+  #     required: true,
+  #     doc: "Public key of the governance program instance to use."
+  #   ]
   # ]
   # @doc """
 
