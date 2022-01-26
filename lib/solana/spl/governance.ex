@@ -1741,8 +1741,8 @@ defmodule Solana.SPL.Governance do
           accounts: [
             %Account{key: proposal, writable?: true},
             %Account{key: find_instruction_address(program, proposal, index), writable?: true},
-            %Account{key: clock()} |
-            params.accounts
+            %Account{key: clock()}
+            | params.accounts
           ],
           data: Instruction.encode_data([16])
         }
@@ -1754,32 +1754,62 @@ defmodule Solana.SPL.Governance do
 
   @doc false
   def validate_account(%Account{} = account), do: {:ok, account}
+
   def validate_account(other) do
     {:error, "expected a Solana.Account, got #{inspect(other)}"}
   end
 
-  # @set_governance_config_schema [
-  #   program: [
-  #     type: {:custom, Key, :check, []},
-  #     required: true,
-  #     doc: "Public key of the governance program instance to use."
-  #   ]
-  # ]
-  # @doc """
+  @set_governance_config_schema [
+    realm: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The realm account the `governance` belongs to."
+    ],
+    governance: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The governance account to receive the new `config`."
+    ],
+    config: [
+      type: {:custom, Solana.Helpers, :validate, [@governance_config_schema]},
+      required: true,
+      doc: """
+      The desired governance configuration.
 
-  # ## Options
+      ### Options
 
-  # #{NimbleOptions.docs(@set_governance_config_schema)}
-  # """
-  # def set_governance_config(opts) do
-  #   case validate(opts, @set_governance_config_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+      #{NimbleOptions.docs(@governance_config_schema)}
+      """
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates the instructions to set a governance's config.
+
+  ## Options
+
+  #{NimbleOptions.docs(@set_governance_config_schema)}
+  """
+  def set_governance_config(opts) do
+    case validate(opts, @set_governance_config_schema) do
+      {:ok, params} ->
+        %Instruction{
+          program: params.program,
+          accounts: [
+            %Account{key: params.realm},
+            %Account{key: params.governance, writable?: true, signer?: true}
+          ],
+          data: Instruction.encode_data([19 | serialize_config(params.config)])
+        }
+
+      error ->
+        error
+    end
+  end
 
   # @flag_instruction_error_schema [
   #   program: [
