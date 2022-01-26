@@ -1982,28 +1982,63 @@ defmodule Solana.SPL.Governance do
     ]
   end
 
-  # @create_owner_record_schema [
-  #   program: [
-  #     type: {:custom, Key, :check, []},
-  #     required: true,
-  #     doc: "Public key of the governance program instance to use."
-  #   ]
-  # ]
-  # @doc """
+  @create_owner_record_schema [
+    realm: [type: {:custom, Key, :check, []}, required: true, doc: "The realm account."],
+    owner: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The governing token owner's account."
+    ],
+    mint: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The mint for the governing token."
+    ],
+    payer: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The account which will pay for Token Owner Record account's creation."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates instructions to create a Token Owner Record with no voter weight (0
+  deposit).
 
-  # ## Options
+  This is used to register a token owner when the Voter Weight Add-in is used
+  and the Governance program doesn't take deposits.
 
-  # #{NimbleOptions.docs(@create_owner_record_schema)}
-  # """
-  # def create_owner_record(opts) do
-  #   case validate(opts, @create_owner_record_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  ## Options
+
+  #{NimbleOptions.docs(@create_owner_record_schema)}
+  """
+  def create_owner_record(opts) do
+    case validate(opts, @create_owner_record_schema) do
+      {:ok, %{program: program, realm: realm, mint: mint, owner: owner} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: realm},
+            %Account{key: owner},
+            %Account{
+              key: find_owner_record_address(program, realm, mint, owner),
+              writable?: true
+            },
+            %Account{key: mint},
+            %Account{key: params.payer, signer?: true},
+            %Account{key: SystemProgram.id()}
+          ],
+          data: Instruction.encode_data([23])
+        }
+
+      error ->
+        error
+    end
+  end
 
   # @update_program_metadata_schema [
   #   program: [
