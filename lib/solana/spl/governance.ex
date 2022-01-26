@@ -1583,28 +1583,52 @@ defmodule Solana.SPL.Governance do
     ])
   end
 
-  # @finalize_vote_schema [
-  #   program: [
-  #     type: {:custom, Key, :check, []},
-  #     required: true,
-  #     doc: "Public key of the governance program instance to use."
-  #   ]
-  # ]
-  # @doc """
+  @finalize_vote_schema [
+    realm: [type: {:custom, Key, :check, []}, required: true, doc: "The realm account."],
+    proposal: [type: {:custom, Key, :check, []}, required: true, doc: "The proposal account."],
+    governance: [type: {:custom, Key, :check, []}, required: true, doc: "The governance account."],
+    owner_record: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the `proposal` owner's Token Owner Record account."
+    ],
+    mint: [type: {:custom, Key, :check, []}, required: true, doc: "The governing token mint."],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates instructions to finalize a vote.
 
-  # ## Options
+  This is available in case the vote was not automatically tipped with the
+  proposal's `duration`.
 
-  # #{NimbleOptions.docs(@finalize_vote_schema)}
-  # """
-  # def finalize_vote(opts) do
-  #   case validate(opts, @finalize_vote_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  ## Options
+
+  #{NimbleOptions.docs(@finalize_vote_schema)}
+  """
+  def finalize_vote(opts) do
+    case validate(opts, @finalize_vote_schema) do
+      {:ok, params} ->
+        %Instruction{
+          program: params.program,
+          accounts: [
+            %Account{key: params.realm},
+            %Account{key: params.governance},
+            %Account{key: params.proposal, writable?: true},
+            %Account{key: params.owner_record, writable?: true},
+            %Account{key: params.mint},
+            %Account{key: clock()}
+          ],
+          data: Instruction.encode_data([14])
+        }
+
+      error ->
+        error
+    end
+  end
 
   # @relinquish_vote_schema [
   #   program: [
