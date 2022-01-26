@@ -34,7 +34,16 @@ defmodule Solana.SPL.Governance do
   end
 
   @doc """
-  Finds the realm address for the given `name`. Should have the seeds `['governance', name]`
+  Finds the native SOL treasury address for the given `governance` account.
+  Should have the seeds: `["treasury", governance]`
+  """
+  @spec find_native_treasury_address(program :: Key.t(), governance :: Key.t()) :: Key.t()
+  def find_native_treasury_address(program, governance) do
+    maybe_return_found_address(["treasury", governance], program)
+  end
+
+  @doc """
+  Finds the realm address for the given `name`. Should have the seeds `["governance", name]`
   """
   @spec find_realm_address(program :: Key.t(), name :: String.t()) :: Key.t()
   def find_realm_address(program, name) do
@@ -43,7 +52,7 @@ defmodule Solana.SPL.Governance do
 
   @doc """
   Finds a token holding address for the given community/council `mint`. Should
-  have the seeds: `['governance', realm, mint]`.
+  have the seeds: `["governance", realm, mint]`.
   """
   @spec find_holding_address(program :: Key.t(), realm :: Key.t(), mint :: Key.t()) :: Key.t()
   def find_holding_address(program, realm, mint) do
@@ -52,7 +61,7 @@ defmodule Solana.SPL.Governance do
 
   @doc """
   Finds the realm config address for the given `realm`. Should have the seeds:
-  `['realm-config', realm]`.
+  `["realm-config", realm]`.
   """
   @spec find_realm_config_address(program :: Key.t(), realm :: Key.t()) :: Key.t()
   def find_realm_config_address(program, realm) do
@@ -61,7 +70,7 @@ defmodule Solana.SPL.Governance do
 
   @doc """
   Finds the token owner record address for the given `realm`, `mint`, and
-  `owner`. Should have the seeds: `['governance', realm, mint, owner]`.
+  `owner`. Should have the seeds: `["governance", realm, mint, owner]`.
   """
   @spec find_owner_record_address(
           program :: Key.t(),
@@ -75,7 +84,7 @@ defmodule Solana.SPL.Governance do
 
   @doc """
   Finds the vote record address for the given `proposal` and `owner_record`.
-  Should have the seeds: `['governance', proposal, owner_record]`.
+  Should have the seeds: `["governance", proposal, owner_record]`.
   """
   @spec find_vote_record_address(
           program :: Key.t(),
@@ -88,7 +97,7 @@ defmodule Solana.SPL.Governance do
 
   @doc """
   Finds the account governance address for the given `realm` and `account`.
-  Should have the seeds: `['account-governance', realm, account]`.
+  Should have the seeds: `["account-governance", realm, account]`.
   """
   @spec find_account_governance_address(program :: Key.t(), realm :: Key.t(), account :: Key.t()) ::
           Key.t()
@@ -98,7 +107,7 @@ defmodule Solana.SPL.Governance do
 
   @doc """
   Finds the program governance address for the given `realm` and `governed`
-  program. Should have the seeds: `['program-governance', realm, governed]`.
+  program. Should have the seeds: `["program-governance", realm, governed]`.
   """
   @spec find_program_governance_address(program :: Key.t(), realm :: Key.t(), governed :: Key.t()) ::
           Key.t()
@@ -108,7 +117,7 @@ defmodule Solana.SPL.Governance do
 
   @doc """
   Finds the mint governance address for the given `realm` and `mint`.
-  Should have the seeds: `['mint-governance', realm, mint]`.
+  Should have the seeds: `["mint-governance", realm, mint]`.
   """
   @spec find_mint_governance_address(program :: Key.t(), realm :: Key.t(), mint :: Key.t()) ::
           Key.t()
@@ -118,7 +127,7 @@ defmodule Solana.SPL.Governance do
 
   @doc """
   Finds the token governance address for the given `realm` and `token`.
-  Should have the seeds: `['token-governance', realm, token]`.
+  Should have the seeds: `["token-governance", realm, token]`.
   """
   @spec find_token_governance_address(program :: Key.t(), realm :: Key.t(), token :: Key.t()) ::
           Key.t()
@@ -128,7 +137,7 @@ defmodule Solana.SPL.Governance do
 
   @doc """
   Finds the `governance` proposal address for the given `mint` and `index`.
-  Should have the seeds: `['governance', governance, mint, index]`.
+  Should have the seeds: `["governance", governance, mint, index]`.
   """
   @spec find_proposal_address(
           program :: Key.t(),
@@ -143,7 +152,7 @@ defmodule Solana.SPL.Governance do
 
   @doc """
   Finds the `proposal`'s `signatory` record address. Should have the seeds:
-  `['governance', proposal, signatory]`.
+  `["governance", proposal, signatory]`.
   """
   @spec find_signatory_record_address(
           program :: Key.t(),
@@ -156,7 +165,7 @@ defmodule Solana.SPL.Governance do
 
   @doc """
   Finds the `proposal`'s instruction address for index `index`. Should have the
-  seeds: `['governance', proposal, index]`.
+  seeds: `["governance", proposal, index]`.
   """
   @spec find_instruction_address(
           program :: Key.t(),
@@ -2089,28 +2098,54 @@ defmodule Solana.SPL.Governance do
     end
   end
 
-  # @create_native_treasury_schema [
-  #   program: [
-  #     type: {:custom, Key, :check, []},
-  #     required: true,
-  #     doc: "Public key of the governance program instance to use."
-  #   ]
-  # ]
-  # @doc """
+  @create_native_treasury_schema [
+    governance: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The governance account associated with the new treasury account."
+    ],
+    payer: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "The account which will pay for the native treasury account's creation."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates instructions to create a native SOL treasury account for a
+  Governance account.
 
-  # ## Options
+  The account has no data and can be used:
 
-  # #{NimbleOptions.docs(@create_native_treasury_schema)}
-  # """
-  # def create_native_treasury(opts) do
-  #   case validate(opts, @create_native_treasury_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  - as a payer for instructions signed by governance PDAs
+  - as a native SOL treasury
+
+  ## Options
+
+  #{NimbleOptions.docs(@create_native_treasury_schema)}
+  """
+  def create_native_treasury(opts) do
+    case validate(opts, @create_native_treasury_schema) do
+      {:ok, %{program: program, governance: governance} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: governance},
+            %Account{key: find_native_treasury_address(program, governance), writable?: true},
+            %Account{key: params.payer, signer?: true},
+            %Account{key: SystemProgram.id()}
+          ],
+          data: Instruction.encode_data([25])
+        }
+
+      error ->
+        error
+    end
+  end
 
   # TODO replace with with Solana.clock() once `solana` package is updated
   defp clock(), do: Solana.pubkey!("SysvarC1ock11111111111111111111111111111111")
