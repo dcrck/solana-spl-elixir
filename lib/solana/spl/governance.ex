@@ -1245,7 +1245,7 @@ defmodule Solana.SPL.Governance do
     index: [
       type: :non_neg_integer,
       required: true,
-      doc: "index the `instruction` will be inserted at."
+      doc: "The index where the `instruction` will be inserted."
     ],
     delay: [
       type: :non_neg_integer,
@@ -1350,7 +1350,7 @@ defmodule Solana.SPL.Governance do
     index: [
       type: :non_neg_integer,
       required: true,
-      doc: "index the `instruction` will be removed from."
+      doc: "The index indicating the instruction to remove."
     ],
     program: [
       type: {:custom, Key, :check, []},
@@ -1701,28 +1701,62 @@ defmodule Solana.SPL.Governance do
 
   defp optional_relinquish_accounts(_), do: []
 
-  # @execute_instruction_schema [
-  #   program: [
-  #     type: {:custom, Key, :check, []},
-  #     required: true,
-  #     doc: "Public key of the governance program instance to use."
-  #   ]
-  # ]
-  # @doc """
+  @execute_instruction_schema [
+    proposal: [type: {:custom, Key, :check, []}, required: true, doc: "The proposal account."],
+    index: [
+      type: :non_neg_integer,
+      required: true,
+      doc: "The index indicating the instruction to execute."
+    ],
+    accounts: [
+      type: {:list, {:custom, __MODULE__, :validate_account, []}},
+      doc: "Any extra accounts that are part of the instruction, in order."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Generates instructions to execute the instruction at index `index` in the
+  proposal.
 
-  # ## Options
+  Anybody can execute an instruction once the Proposal has been approved and the
+  instruction's `delay` time has passed.
 
-  # #{NimbleOptions.docs(@execute_instruction_schema)}
-  # """
-  # def execute_instruction(opts) do
-  #   case validate(opts, @execute_instruction_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  The instruction being executed will be signed by the Governance PDA the
+  proposal belongs to, e.g. the Program Governance PDA for program upgrade
+  instructions.
+
+  ## Options
+
+  #{NimbleOptions.docs(@execute_instruction_schema)}
+  """
+  def execute_instruction(opts) do
+    case validate(opts, @execute_instruction_schema) do
+      {:ok, %{program: program, proposal: proposal, index: index} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: proposal, writable?: true},
+            %Account{key: find_instruction_address(program, proposal, index), writable?: true},
+            %Account{key: clock()} |
+            params.accounts
+          ],
+          data: Instruction.encode_data([16])
+        }
+
+      error ->
+        error
+    end
+  end
+
+  @doc false
+  def validate_account(%Account{} = account), do: {:ok, account}
+  def validate_account(other) do
+    {:error, "expected a Solana.Account, got #{inspect(other)}"}
+  end
 
   # @set_governance_config_schema [
   #   program: [
