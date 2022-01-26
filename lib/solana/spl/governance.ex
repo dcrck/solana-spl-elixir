@@ -225,22 +225,10 @@ defmodule Solana.SPL.Governance do
             List.flatten([
               create_realm_accounts(Map.pop(params, :council_mint), realm),
               %Account{key: find_realm_config_address(program, realm), writable?: true},
-              maybe_add_voter_weight_addin(params)
+              voter_weight_addin_account(params)
             ]),
           data:
-            Instruction.encode_data([
-              0,
-              {byte_size(name), 32},
-              name,
-              unary(Map.has_key?(params, :council_mint)),
-              {params.minimum, 64},
-              Enum.find_index(
-                @max_vote_weight_sources,
-                &(&1 == elem(params.max_vote_weight_source, 0))
-              ),
-              {elem(params.max_vote_weight_source, 1), 64},
-              unary(Map.has_key?(params, :addin))
-            ])
+            Instruction.encode_data([0, {byte_size(name), 32}, name | realm_config_data(params)])
         }
 
       error ->
@@ -268,20 +256,6 @@ defmodule Solana.SPL.Governance do
       %Account{key: find_holding_address(params.program, realm, mint), writable?: true}
     ])
   end
-
-  defp maybe_add_voter_weight_addin(%{addin: addin}) do
-    [%Account{key: addin}]
-  end
-
-  defp maybe_add_voter_weight_addin(_), do: []
-
-  @doc false
-  def validate_max_vote_weight_source({type, value})
-      when type in @max_vote_weight_sources and is_integer(value) and value > 0 do
-    {:ok, {type, value}}
-  end
-
-  def validate_max_vote_weight_source(_), do: {:error, "invalid max vote weight source"}
 
   @deposit_schema [
     owner: [
@@ -1913,28 +1887,100 @@ defmodule Solana.SPL.Governance do
     end
   end
 
-  # @set_realm_config_schema [
-  #   program: [
-  #     type: {:custom, Key, :check, []},
-  #     required: true,
-  #     doc: "Public key of the governance program instance to use."
-  #   ]
-  # ]
-  # @doc """
+  @set_realm_config_schema [
+    realm: [type: {:custom, Key, :check, []}, required: true, doc: "The realm account."],
+    authority: [type: {:custom, Key, :check, []}, required: true, doc: "The realm authority."],
+    council_mint: [type: {:custom, Key, :check, []}, doc: "The realm's council token mint."],
+    payer: [
+      type: {:custom, Key, :check, []},
+      doc: "The account which will pay for Realm Config account's creation."
+    ],
+    addin: [type: {:custom, Key, :check, []}, doc: "Community voter weight add-in program ID."],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ],
+    max_vote_weight_source: [
+      type: {:custom, __MODULE__, :validate_max_vote_weight_source, []},
+      required: true,
+      doc: """
+      The source of max vote weight used for voting. Values below 100%
+      mint supply can be used when the governing token is fully minted but not
+      distributed yet.
+      """
+    ],
+    minimum: [
+      type: :non_neg_integer,
+      required: true,
+      doc: "Minimum number of community tokens a user must hold to create a governance."
+    ]
+  ]
+  @doc """
+  Generates instructions to set the realm config.
 
-  # ## Options
+  ## Options
 
-  # #{NimbleOptions.docs(@set_realm_config_schema)}
-  # """
-  # def set_realm_config(opts) do
-  #   case validate(opts, @set_realm_config_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  #{NimbleOptions.docs(@set_realm_config_schema)}
+  """
+  def set_realm_config(opts) do
+    case validate(opts, @set_realm_config_schema) do
+      {:ok, %{program: program, realm: realm} = params} ->
+        %Instruction{
+          program: program,
+          accounts:
+            List.flatten([
+              %Account{key: realm, writable?: true},
+              %Account{key: params.authority, signer?: true},
+              council_accounts(params),
+              %Account{key: SystemProgram.id()},
+              %Account{key: find_realm_config_address(program, realm), writable?: true},
+              payer_account(params),
+              voter_weight_addin_account(params)
+            ]),
+          data: Instruction.encode_data([22 | realm_config_data(params)])
+        }
+
+      error ->
+        error
+    end
+  end
+
+  defp payer_account(%{payer: payer}), do: [%Account{key: payer, signer?: true}]
+  defp payer_account(_), do: []
+
+  defp council_accounts(%{council_mint: mint, realm: realm, program: program}) do
+    [
+      %Account{key: mint},
+      %Account{key: find_holding_address(program, realm, mint), writable?: true}
+    ]
+  end
+
+  defp council_accounts(_), do: []
+
+  defp voter_weight_addin_account(%{addin: addin}), do: [%Account{key: addin}]
+  defp voter_weight_addin_account(_), do: []
+
+  @doc false
+  def validate_max_vote_weight_source({type, value})
+      when type in @max_vote_weight_sources and is_integer(value) and value > 0 do
+    {:ok, {type, value}}
+  end
+
+  def validate_max_vote_weight_source(_), do: {:error, "invalid max vote weight source"}
+
+  defp realm_config_data(params) do
+    [
+      unary(Map.has_key?(params, :council_mint)),
+      {params.minimum, 64},
+      Enum.find_index(
+        @max_vote_weight_sources,
+        &(&1 == elem(params.max_vote_weight_source, 0))
+      ),
+      {elem(params.max_vote_weight_source, 1), 64},
+      unary(Map.has_key?(params, :addin))
+    ]
+  end
 
   # @create_owner_record_schema [
   #   program: [
