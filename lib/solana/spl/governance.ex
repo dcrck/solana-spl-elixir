@@ -1811,28 +1811,55 @@ defmodule Solana.SPL.Governance do
     end
   end
 
-  # @flag_instruction_error_schema [
-  #   program: [
-  #     type: {:custom, Key, :check, []},
-  #     required: true,
-  #     doc: "Public key of the governance program instance to use."
-  #   ]
-  # ]
-  # @doc """
+  @flag_instruction_error_schema [
+    proposal: [type: {:custom, Key, :check, []}, required: true, doc: "The proposal account."],
+    index: [
+      type: :non_neg_integer,
+      required: true,
+      doc: "The index indicating the instruction to flag."
+    ],
+    authority: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance authority (or its delegate)."
+    ],
+    owner_record: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the `proposal` owner's Token Owner Record account."
+    ],
+    program: [
+      type: {:custom, Key, :check, []},
+      required: true,
+      doc: "Public key of the governance program instance to use."
+    ]
+  ]
+  @doc """
+  Flag an instruction and its parent proposal with "error" status.
 
-  # ## Options
+  ## Options
 
-  # #{NimbleOptions.docs(@flag_instruction_error_schema)}
-  # """
-  # def flag_instruction_error(opts) do
-  #   case validate(opts, @flag_instruction_error_schema) do
-  #     {:ok, params} ->
-  #       %Instruction{
-  #       }
-  #     error ->
-  #       error
-  #   end
-  # end
+  #{NimbleOptions.docs(@flag_instruction_error_schema)}
+  """
+  def flag_instruction_error(opts) do
+    case validate(opts, @flag_instruction_error_schema) do
+      {:ok, %{program: program, proposal: proposal, index: index} = params} ->
+        %Instruction{
+          program: program,
+          accounts: [
+            %Account{key: proposal, writable?: true},
+            %Account{key: params.owner_record},
+            %Account{key: params.authority, signer?: true},
+            %Account{key: find_instruction_address(program, proposal, index), writable?: true},
+            %Account{key: clock()}
+          ],
+          data: Instruction.encode_data([20])
+        }
+
+      error ->
+        error
+    end
+  end
 
   # @set_realm_authority_schema [
   #   program: [
