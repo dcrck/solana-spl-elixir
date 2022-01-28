@@ -29,9 +29,7 @@ defmodule Solana.SPL.Governance do
   have the seeds: `["metadata"]`
   """
   @spec find_metadata_address(program :: Key.t()) :: Key.t()
-  def find_metadata_address(program) do
-    maybe_return_found_address(["metadata"], program)
-  end
+  def find_metadata_address(program), do: find_address(["metadata"], program)
 
   @doc """
   Finds the native SOL treasury address for the given `governance` account.
@@ -39,7 +37,7 @@ defmodule Solana.SPL.Governance do
   """
   @spec find_native_treasury_address(program :: Key.t(), governance :: Key.t()) :: Key.t()
   def find_native_treasury_address(program, governance) do
-    maybe_return_found_address(["treasury", governance], program)
+    find_address(["treasury", governance], program)
   end
 
   @doc """
@@ -47,7 +45,7 @@ defmodule Solana.SPL.Governance do
   """
   @spec find_realm_address(program :: Key.t(), name :: String.t()) :: Key.t()
   def find_realm_address(program, name) do
-    maybe_return_found_address(["governance", name], program)
+    find_address(["governance", name], program)
   end
 
   @doc """
@@ -56,7 +54,7 @@ defmodule Solana.SPL.Governance do
   """
   @spec find_holding_address(program :: Key.t(), realm :: Key.t(), mint :: Key.t()) :: Key.t()
   def find_holding_address(program, realm, mint) do
-    maybe_return_found_address(["governance", realm, mint], program)
+    find_address(["governance", realm, mint], program)
   end
 
   @doc """
@@ -65,7 +63,7 @@ defmodule Solana.SPL.Governance do
   """
   @spec find_realm_config_address(program :: Key.t(), realm :: Key.t()) :: Key.t()
   def find_realm_config_address(program, realm) do
-    maybe_return_found_address(["realm-config", realm], program)
+    find_address(["realm-config", realm], program)
   end
 
   @doc """
@@ -79,7 +77,7 @@ defmodule Solana.SPL.Governance do
           owner :: Key.t()
         ) :: Key.t()
   def find_owner_record_address(program, realm, mint, owner) do
-    maybe_return_found_address(["governance", realm, mint, owner], program)
+    find_address(["governance", realm, mint, owner], program)
   end
 
   @doc """
@@ -92,7 +90,7 @@ defmodule Solana.SPL.Governance do
           owner_record :: Key.t()
         ) :: Key.t()
   def find_vote_record_address(program, proposal, owner_record) do
-    maybe_return_found_address(["governance", proposal, owner_record], program)
+    find_address(["governance", proposal, owner_record], program)
   end
 
   @doc """
@@ -102,7 +100,7 @@ defmodule Solana.SPL.Governance do
   @spec find_account_governance_address(program :: Key.t(), realm :: Key.t(), account :: Key.t()) ::
           Key.t()
   def find_account_governance_address(program, realm, account) do
-    maybe_return_found_address(["account-governance", realm, account], program)
+    find_address(["account-governance", realm, account], program)
   end
 
   @doc """
@@ -112,7 +110,7 @@ defmodule Solana.SPL.Governance do
   @spec find_program_governance_address(program :: Key.t(), realm :: Key.t(), governed :: Key.t()) ::
           Key.t()
   def find_program_governance_address(program, realm, governed) do
-    maybe_return_found_address(["program-governance", realm, governed], program)
+    find_address(["program-governance", realm, governed], program)
   end
 
   @doc """
@@ -122,7 +120,7 @@ defmodule Solana.SPL.Governance do
   @spec find_mint_governance_address(program :: Key.t(), realm :: Key.t(), mint :: Key.t()) ::
           Key.t()
   def find_mint_governance_address(program, realm, mint) do
-    maybe_return_found_address(["mint-governance", realm, mint], program)
+    find_address(["mint-governance", realm, mint], program)
   end
 
   @doc """
@@ -132,7 +130,7 @@ defmodule Solana.SPL.Governance do
   @spec find_token_governance_address(program :: Key.t(), realm :: Key.t(), token :: Key.t()) ::
           Key.t()
   def find_token_governance_address(program, realm, token) do
-    maybe_return_found_address(["token-governance", realm, token], program)
+    find_address(["token-governance", realm, token], program)
   end
 
   @doc """
@@ -147,7 +145,7 @@ defmodule Solana.SPL.Governance do
         ) ::
           Key.t()
   def find_proposal_address(program, governance, mint, index) do
-    maybe_return_found_address(["governance", governance, mint, <<index::size(32)>>], program)
+    find_address(["governance", governance, mint, <<index::size(32)>>], program)
   end
 
   @doc """
@@ -160,27 +158,73 @@ defmodule Solana.SPL.Governance do
           signatory :: Key.t()
         ) :: Key.t()
   def find_signatory_record_address(program, proposal, signatory) do
-    maybe_return_found_address(["governance", proposal, signatory], program)
+    find_address(["governance", proposal, signatory], program)
   end
 
   @doc """
-  Finds the `proposal`'s instruction address for index `index`. Should have the
-  seeds: `["governance", proposal, index]`.
+  Finds the `proposal`'s instruction address for the given `option` and `index`.
+  Should have the seeds: `["governance", proposal, option, index]`.
   """
   @spec find_instruction_address(
           program :: Key.t(),
           proposal :: Key.t(),
-          index :: non_neg_integer
+          index :: non_neg_integer,
+          option :: non_neg_integer
         ) :: Key.t()
-  def find_instruction_address(program, proposal, index) do
-    maybe_return_found_address(["governance", proposal, <<index::size(16)>>], program)
+  def find_instruction_address(program, proposal, index, option \\ 0) do
+    find_address(["governance", proposal, <<option::size(16)>>, <<index::size(16)>>], program)
   end
 
-  defp maybe_return_found_address(seeds, program) do
+  defp find_address(seeds, program) do
     case Key.find_address(seeds, program) do
-      {:ok, address, _} -> address
+      {:ok, address, _} -> {:ok, address}
       error -> error
     end
+  end
+
+  @doc false
+  def validate_max_vote_weight_source({type, value})
+      when type in @max_vote_weight_sources and is_integer(value) and value > 0 do
+    {:ok, {type, value}}
+  end
+
+  def validate_max_vote_weight_source(_), do: {:error, "invalid max vote weight source"}
+
+  @doc false
+  def validate_vote_type(:single), do: {:ok, :single}
+  def validate_vote_type({:multiple, n}) when is_integer(n) and n > 0, do: {:ok, {:multiple, n}}
+
+  def validate_vote_type(other) do
+    {:error, "expected :single or {:multiple, n}, got: #{inspect(other)}"}
+  end
+
+  @doc false
+  def validate_vote({rank, weight} = vote) when rank in 0..255 and weight in 0..100,
+    do: {:ok, vote}
+
+  def validate_vote(other), do: {:error, "Expected a {rank, weight} tuple, got #{inspect(other)}"}
+
+  @doc false
+  def validate_account(%Account{} = account), do: {:ok, account}
+
+  def validate_account(other) do
+    {:error, "expected a Solana.Account, got #{inspect(other)}"}
+  end
+
+  @doc false
+  def validate_instruction(%Instruction{} = ix), do: {:ok, ix}
+
+  def validate_instruction(other) do
+    {:error, "expected a Solana.Instruction, got: #{inspect(other)}"}
+  end
+
+  @doc false
+  def validate_threshold({type, pct}) when type in @vote_thresholds and pct in 1..100 do
+    {:ok, {type, pct}}
+  end
+
+  def validate_threshold(threshold) do
+    {:error, "expected {:yes, percentage} or {:quorum, percentage}, got: #{inspect(threshold)}"}
   end
 
   @create_realm_schema [
@@ -233,46 +277,58 @@ defmodule Solana.SPL.Governance do
   #{NimbleOptions.docs(@create_realm_schema)}
   """
   def create_realm(opts) do
-    case validate(opts, @create_realm_schema) do
-      {:ok, %{program: program, name: name} = params} ->
-        realm = find_realm_address(program, name)
-
-        %Instruction{
-          program: program,
-          accounts:
-            List.flatten([
-              create_realm_accounts(Map.pop(params, :council_mint), realm),
-              %Account{key: find_realm_config_address(program, realm), writable?: true},
-              voter_weight_addin_account(params)
-            ]),
-          data:
-            Instruction.encode_data([0, {byte_size(name), 32}, name | realm_config_data(params)])
-        }
-
-      error ->
-        error
+    with {:ok, %{program: program, name: name} = params} <- validate(opts, @create_realm_schema),
+         {:ok, realm} <- find_realm_address(program, name),
+         {:ok, realm_config} <- find_realm_config_address(program, realm),
+         {:ok, council_accts} <- council_accounts(Map.put(params, :realm, realm)),
+         {:ok, holding_address} <- find_holding_address(program, realm, params.community_mint) do
+      %Instruction{
+        program: program,
+        accounts:
+          List.flatten([
+            %Account{key: realm, writable?: true},
+            %Account{key: params.authority},
+            %Account{key: params.community_mint},
+            %Account{key: holding_address, writable?: true},
+            %Account{key: params.payer, signer?: true},
+            %Account{key: SystemProgram.id()},
+            %Account{key: Token.id()},
+            %Account{key: Solana.rent()},
+            council_accts,
+            %Account{key: realm_config, writable?: true},
+            voter_weight_addin_accounts(params)
+          ]),
+        data:
+          Instruction.encode_data([0, {byte_size(name), 32}, name | realm_config_data(params)])
+      }
+    else
+      error -> error
     end
   end
 
-  defp create_realm_accounts({nil, %{community_mint: mint} = params}, realm) do
-    [
-      %Account{key: realm, writable?: true},
-      %Account{key: params.authority},
-      %Account{key: mint},
-      %Account{key: find_holding_address(params.program, realm, mint), writable?: true},
-      %Account{key: params.payer, signer?: true},
-      %Account{key: SystemProgram.id()},
-      %Account{key: Token.id()},
-      %Account{key: Solana.rent()}
-    ]
+  defp council_accounts(%{council_mint: mint, realm: realm, program: program}) do
+    case find_holding_address(program, realm, mint) do
+      {:ok, address} -> {:ok, [%Account{key: mint}, %Account{key: address, writable?: true}]}
+      error -> error
+    end
   end
 
-  defp create_realm_accounts({mint, params}, realm) do
-    List.flatten([
-      create_realm_accounts({nil, params}, realm),
-      %Account{key: mint},
-      %Account{key: find_holding_address(params.program, realm, mint), writable?: true}
-    ])
+  defp council_accounts(_), do: {:ok, []}
+
+  defp voter_weight_addin_accounts(%{addin: addin}), do: [%Account{key: addin}]
+  defp voter_weight_addin_accounts(_), do: []
+
+  defp realm_config_data(params) do
+    [
+      unary(Map.has_key?(params, :council_mint)),
+      {params.minimum, 64},
+      Enum.find_index(
+        @max_vote_weight_sources,
+        &(&1 == elem(params.max_vote_weight_source, 0))
+      ),
+      {elem(params.max_vote_weight_source, 1), 64},
+      unary(Map.has_key?(params, :addin))
+    ]
   end
 
   @deposit_schema [
@@ -336,30 +392,28 @@ defmodule Solana.SPL.Governance do
   #{NimbleOptions.docs(@deposit_schema)}
   """
   def deposit(opts) do
-    case validate(opts, @deposit_schema) do
-      {:ok, %{program: program, realm: realm, mint: mint, owner: owner} = params} ->
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: realm},
-            %Account{key: find_holding_address(program, realm, mint), writable?: true},
-            %Account{key: params.from, writable?: true},
-            %Account{key: owner, signer?: true},
-            %Account{key: params.authority, signer?: true},
-            %Account{
-              key: find_owner_record_address(program, realm, mint, owner),
-              writable?: true
-            },
-            %Account{key: params.payer, signer?: true},
-            %Account{key: SystemProgram.id()},
-            %Account{key: Token.id()},
-            %Account{key: Solana.rent()}
-          ],
-          data: Instruction.encode_data([1, {params.amount, 64}])
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @deposit_schema),
+         %{program: program, realm: realm, mint: mint, owner: owner} = params,
+         {:ok, holding} <- find_holding_address(program, realm, mint),
+         {:ok, owner_record} <- find_owner_record_address(program, realm, mint, owner) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: realm},
+          %Account{key: holding, writable?: true},
+          %Account{key: params.from, writable?: true},
+          %Account{key: owner, signer?: true},
+          %Account{key: params.authority, signer?: true},
+          %Account{key: owner_record, writable?: true},
+          %Account{key: params.payer, signer?: true},
+          %Account{key: SystemProgram.id()},
+          %Account{key: Token.id()},
+          %Account{key: Solana.rent()}
+        ],
+        data: Instruction.encode_data([1, {params.amount, 64}])
+      }
+    else
+      error -> error
     end
   end
 
@@ -372,7 +426,7 @@ defmodule Solana.SPL.Governance do
     realm: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "Public key of the realm to withdraw user tokens from."
+      doc: "Public key of the realm to withdraw governance tokens from."
     ],
     mint: [
       type: {:custom, Key, :check, []},
@@ -404,27 +458,26 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@withdraw_schema)}
   """
+  # TODO Create test case
   def withdraw(opts) do
-    case validate(opts, @withdraw_schema) do
-      {:ok, %{program: program, realm: realm, mint: mint, owner: owner} = params} ->
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: realm},
-            %Account{key: find_holding_address(program, realm, mint), writable?: true},
-            %Account{key: params.to, writable?: true},
-            %Account{key: owner, signer?: true},
-            %Account{
-              key: find_owner_record_address(program, realm, mint, owner),
-              writable?: true
-            },
-            %Account{key: Token.id()}
-          ],
-          data: Instruction.encode_data([2])
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @withdraw_schema),
+         %{program: program, realm: realm, mint: mint, owner: owner} = params,
+         {:ok, holding} <- find_holding_address(program, realm, mint),
+         {:ok, owner_record} <- find_owner_record_address(program, realm, mint, owner) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: realm},
+          %Account{key: holding, writable?: true},
+          %Account{key: params.to, writable?: true},
+          %Account{key: owner, signer?: true},
+          %Account{key: owner_record, writable?: true},
+          %Account{key: Token.id()}
+        ],
+        data: Instruction.encode_data([2])
+      }
+    else
+      error -> error
     end
   end
 
@@ -465,6 +518,7 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@delegate_schema)}
   """
+  # TODO Create test case
   def delegate(opts) do
     case validate(opts, @delegate_schema) do
       {:ok, params} ->
@@ -529,13 +583,17 @@ defmodule Solana.SPL.Governance do
     ]
   ]
 
-  @doc false
-  def validate_threshold({type, pct}) when type in @vote_thresholds and pct in 1..100 do
-    {:ok, {type, pct}}
-  end
-
-  def validate_threshold(threshold) do
-    {:error, "expected {:yes, percentage} or {:quorum, percentage}, got: #{inspect(threshold)}"}
+  defp governance_config_data(config) do
+    [
+      Enum.find_index(@vote_thresholds, &(&1 == elem(config.threshold, 0))),
+      elem(config.threshold, 1),
+      {config.minimum_community, 64},
+      {config.delay, 32},
+      {config.duration, 32},
+      Enum.find_index(@vote_weight_sources, &(&1 == config.vote_weight_source)),
+      {config.cooldown, 32},
+      {config.minimum_council, 64}
+    ]
   end
 
   @create_account_governance_schema [
@@ -593,30 +651,28 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@create_account_governance_schema)}
   """
+  # TODO Create test case
   def create_account_governance(opts) do
-    case validate(opts, @create_account_governance_schema) do
-      {:ok, %{program: program, realm: realm, governed: governed} = params} ->
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: realm},
-            %Account{
-              key: find_account_governance_address(program, realm, governed),
-              writable?: true
-            },
-            %Account{key: governed},
-            %Account{key: params.owner_record},
-            %Account{key: params.payer, signer?: true},
-            %Account{key: SystemProgram.id()},
-            %Account{key: Solana.rent()},
-            %Account{key: params.authority, signer?: true}
-            | voter_weight_accounts(params)
-          ],
-          data: Instruction.encode_data([4 | serialize_config(params.config)])
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @create_account_governance_schema),
+         %{program: program, realm: realm, governed: governed} = params,
+         {:ok, account_governance} <- find_account_governance_address(program, realm, governed) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: realm},
+          %Account{key: account_governance, writable?: true},
+          %Account{key: governed},
+          %Account{key: params.owner_record},
+          %Account{key: params.payer, signer?: true},
+          %Account{key: SystemProgram.id()},
+          %Account{key: Solana.rent()},
+          %Account{key: params.authority, signer?: true}
+          | voter_weight_accounts(params)
+        ],
+        data: Instruction.encode_data([4 | governance_config_data(params.config)])
+      }
+    else
+      error -> error
     end
   end
 
@@ -688,45 +744,44 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@create_program_governance_schema)}
   """
+  # TODO Create test case
   def create_program_governance(opts) do
-    case validate(opts, @create_program_governance_schema) do
-      {:ok, %{program: program, realm: realm, governed: governed} = params} ->
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: realm},
-            %Account{
-              key: find_program_governance_address(program, realm, governed),
-              writable?: true
-            },
-            %Account{key: governed},
-            %Account{key: find_program_data(program), writable?: true},
-            %Account{key: params.upgrade_authority, signer?: true},
-            %Account{key: params.owner_record},
-            %Account{key: params.payer, signer?: true},
-            %Account{key: bpf_loader()},
-            %Account{key: SystemProgram.id()},
-            %Account{key: Solana.rent()},
-            %Account{key: params.authority, signer?: true}
-            | voter_weight_accounts(params)
-          ],
-          data:
-            Instruction.encode_data(
-              List.flatten([
-                5,
-                serialize_config(params.config),
-                unary(params.transfer_upgrade_authority?)
-              ])
-            )
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @create_program_governance_schema),
+         %{program: program, realm: realm, governed: governed} = params,
+         {:ok, program_governance} <- find_program_governance_address(program, realm, governed),
+         {:ok, program_data} <- find_program_data(program) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: realm},
+          %Account{key: program_governance, writable?: true},
+          %Account{key: governed},
+          %Account{key: program_data, writable?: true},
+          %Account{key: params.upgrade_authority, signer?: true},
+          %Account{key: params.owner_record},
+          %Account{key: params.payer, signer?: true},
+          %Account{key: bpf_loader()},
+          %Account{key: SystemProgram.id()},
+          %Account{key: Solana.rent()},
+          %Account{key: params.authority, signer?: true}
+          | voter_weight_accounts(params)
+        ],
+        data:
+          Instruction.encode_data(
+            List.flatten([
+              5,
+              governance_config_data(params.config),
+              unary(params.transfer_upgrade_authority?)
+            ])
+          )
+      }
+    else
+      error -> error
     end
   end
 
   defp bpf_loader(), do: Solana.pubkey!("BPFLoaderUpgradeab1e11111111111111111111111")
-  defp find_program_data(program), do: maybe_return_found_address([program], bpf_loader())
+  defp find_program_data(program), do: find_address([program], bpf_loader())
 
   @create_mint_governance_schema [
     payer: [
@@ -797,38 +852,35 @@ defmodule Solana.SPL.Governance do
   #{NimbleOptions.docs(@create_mint_governance_schema)}
   """
   def create_mint_governance(opts) do
-    case validate(opts, @create_mint_governance_schema) do
-      {:ok, %{program: program, realm: realm, governed: mint} = params} ->
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: realm},
-            %Account{
-              key: find_mint_governance_address(program, realm, mint),
-              writable?: true
-            },
-            %Account{key: mint, writable?: true},
-            %Account{key: params.mint_authority, signer?: true},
-            %Account{key: params.owner_record},
-            %Account{key: params.payer, signer?: true},
-            %Account{key: Token.id()},
-            %Account{key: SystemProgram.id()},
-            %Account{key: Solana.rent()},
-            %Account{key: params.authority, signer?: true}
-            | voter_weight_accounts(params)
-          ],
-          data:
-            Instruction.encode_data(
-              List.flatten([
-                17,
-                serialize_config(params.config),
-                unary(params.transfer_mint_authority?)
-              ])
-            )
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @create_mint_governance_schema),
+         %{program: program, realm: realm, governed: mint} = params,
+         {:ok, mint_governance} <- find_mint_governance_address(program, realm, mint) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: realm},
+          %Account{key: mint_governance, writable?: true},
+          %Account{key: mint, writable?: true},
+          %Account{key: params.mint_authority, signer?: true},
+          %Account{key: params.owner_record},
+          %Account{key: params.payer, signer?: true},
+          %Account{key: Token.id()},
+          %Account{key: SystemProgram.id()},
+          %Account{key: Solana.rent()},
+          %Account{key: params.authority, signer?: true}
+          | voter_weight_accounts(params)
+        ],
+        data:
+          Instruction.encode_data(
+            List.flatten([
+              17,
+              governance_config_data(params.config),
+              unary(params.transfer_mint_authority?)
+            ])
+          )
+      }
+    else
+      error -> error
     end
   end
 
@@ -900,53 +952,38 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@create_token_governance_schema)}
   """
+  # TODO Create test case
   def create_token_governance(opts) do
-    case validate(opts, @create_token_governance_schema) do
-      {:ok, %{program: program, realm: realm, governed: governed} = params} ->
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: realm},
-            %Account{
-              key: find_token_governance_address(program, realm, governed),
-              writable?: true
-            },
-            %Account{key: governed, writable?: true},
-            %Account{key: params.owner, signer?: true},
-            %Account{key: params.owner_record},
-            %Account{key: params.payer, signer?: true},
-            %Account{key: Token.id()},
-            %Account{key: SystemProgram.id()},
-            %Account{key: Solana.rent()},
-            %Account{key: params.authority, signer?: true}
-            | voter_weight_accounts(params)
-          ],
-          data:
-            Instruction.encode_data(
-              List.flatten([
-                18,
-                serialize_config(params.config),
-                unary(params.transfer_ownership?)
-              ])
-            )
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @create_token_governance_schema),
+         %{program: program, realm: realm, governed: governed} = params,
+         {:ok, token_governance} <- find_token_governance_address(program, realm, governed) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: realm},
+          %Account{key: token_governance, writable?: true},
+          %Account{key: governed, writable?: true},
+          %Account{key: params.owner, signer?: true},
+          %Account{key: params.owner_record},
+          %Account{key: params.payer, signer?: true},
+          %Account{key: Token.id()},
+          %Account{key: SystemProgram.id()},
+          %Account{key: Solana.rent()},
+          %Account{key: params.authority, signer?: true}
+          | voter_weight_accounts(params)
+        ],
+        data:
+          Instruction.encode_data(
+            List.flatten([
+              18,
+              governance_config_data(params.config),
+              unary(params.transfer_ownership?)
+            ])
+          )
+      }
+    else
+      error -> error
     end
-  end
-
-  defp serialize_config(config) do
-    [
-      Enum.find_index(@vote_thresholds, &(&1 == elem(config.threshold, 0))),
-      elem(config.threshold, 1),
-      {config.minimum_community, 64},
-      {config.delay, 32},
-      {config.duration, 32},
-      Enum.find_index(@vote_weight_sources, &(&1 == config.vote_weight_source)),
-      {config.cooldown, 32},
-      {config.minimum_council, 64}
-    ]
   end
 
   @create_proposal_schema [
@@ -1023,57 +1060,51 @@ defmodule Solana.SPL.Governance do
   #{NimbleOptions.docs(@create_proposal_schema)}
   """
   def create_proposal(opts) do
-    case validate(opts, @create_proposal_schema) do
-      {:ok, %{vote_type: {:multiple, n}, options: options}} when n > length(options) ->
-        {:error, "number of choices greater than options available"}
-
-      {:ok, %{program: program, realm: realm, governance: governance, owner: owner} = params} ->
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: realm},
-            %Account{
-              key: find_proposal_address(program, governance, params.mint, params.index),
-              writable?: true
-            },
-            %Account{key: governance, writable?: true},
-            %Account{
-              key: find_owner_record_address(program, realm, params.mint, owner),
-              writable?: true
-            },
-            %Account{key: params.mint},
-            %Account{key: params.authority, signer?: true},
-            %Account{key: params.payer, signer?: true},
-            %Account{key: SystemProgram.id()},
-            %Account{key: Solana.rent()},
-            %Account{key: clock()}
-            | voter_weight_accounts(params)
-          ],
-          data:
-            Instruction.encode_data(
-              List.flatten([
-                6,
-                encode_string(params.name),
-                encode_string(params.description),
-                encode_vote_type(params.vote_type),
-                {length(params.options), 32},
-                Enum.map(params.options, &encode_string/1),
-                unary(params.has_deny_option?)
-              ])
-            )
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @create_proposal_schema),
+         :ok <- check_proposal_options(params),
+         %{program: program, realm: realm, governance: governance, owner: owner} = params,
+         {:ok, proposal} <- find_proposal_address(program, governance, params.mint, params.index),
+         {:ok, owner_record} <- find_owner_record_address(program, realm, params.mint, owner) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: realm},
+          %Account{key: proposal, writable?: true},
+          %Account{key: governance, writable?: true},
+          %Account{key: owner_record, writable?: true},
+          %Account{key: params.mint},
+          %Account{key: params.authority, signer?: true},
+          %Account{key: params.payer, signer?: true},
+          %Account{key: SystemProgram.id()},
+          %Account{key: Solana.rent()},
+          %Account{key: clock()}
+          | voter_weight_accounts(params)
+        ],
+        data:
+          Instruction.encode_data(
+            List.flatten([
+              6,
+              encode_string(params.name),
+              encode_string(params.description),
+              encode_vote_type(params.vote_type),
+              {length(params.options), 32},
+              Enum.map(params.options, &encode_string/1),
+              unary(params.has_deny_option?)
+            ])
+          )
+      }
+    else
+      error -> error
     end
   end
 
-  def validate_vote_type(:single), do: {:ok, :single}
-  def validate_vote_type({:multiple, n}) when is_integer(n) and n > 0, do: {:ok, {:multiple, n}}
-
-  def validate_vote_type(other) do
-    {:error, "expected :single or {:multiple, n}, got: #{inspect(other)}"}
+  # https://docs.rs/spl-governance/2.1.4/spl_governance/state/proposal/enum.VoteType.html#variant.MultiChoice
+  defp check_proposal_options(%{vote_type: {:multiple, n}, options: options})
+       when n > length(options) do
+    {:error, "number of choices greater than options available"}
   end
+
+  defp check_proposal_options(_), do: :ok
 
   # TODO replace with {str, "borsh"} once `solana` package is updated
   defp encode_string(str), do: [{byte_size(str), 32}, str]
@@ -1123,28 +1154,26 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@add_signatory_schema)}
   """
+  # TODO create test case
   def add_signatory(opts) do
-    case validate(opts, @add_signatory_schema) do
-      {:ok, %{program: program, proposal: proposal, signatory: signatory} = params} ->
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: proposal, writable?: true},
-            %Account{key: params.owner_record},
-            %Account{key: params.authority, signer?: true},
-            %Account{
-              key: find_signatory_record_address(program, proposal, signatory),
-              writable?: true
-            },
-            %Account{key: params.payer, signer?: true},
-            %Account{key: SystemProgram.id()},
-            %Account{key: Solana.rent()}
-          ],
-          data: Instruction.encode_data([7, signatory])
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @add_signatory_schema),
+         %{program: program, proposal: proposal, signatory: signatory} = params,
+         {:ok, signatory_record} <- find_signatory_record_address(program, proposal, signatory) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: proposal, writable?: true},
+          %Account{key: params.owner_record},
+          %Account{key: params.authority, signer?: true},
+          %Account{key: signatory_record, writable?: true},
+          %Account{key: params.payer, signer?: true},
+          %Account{key: SystemProgram.id()},
+          %Account{key: Solana.rent()}
+        ],
+        data: Instruction.encode_data([7, signatory])
+      }
+    else
+      error -> error
     end
   end
 
@@ -1188,26 +1217,24 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@remove_signatory_schema)}
   """
+  # TODO create test case
   def remove_signatory(opts) do
-    case validate(opts, @remove_signatory_schema) do
-      {:ok, %{program: program, proposal: proposal, signatory: signatory} = params} ->
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: proposal, writable?: true},
-            %Account{key: params.owner_record},
-            %Account{key: params.authority, signer?: true},
-            %Account{
-              key: find_signatory_record_address(program, proposal, signatory),
-              writable?: true
-            },
-            %Account{key: params.beneficiary, writable?: true}
-          ],
-          data: Instruction.encode_data([8, signatory])
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @remove_signatory_schema),
+         %{program: program, proposal: proposal, signatory: signatory} = params,
+         {:ok, signatory_record} <- find_signatory_record_address(program, proposal, signatory) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: proposal, writable?: true},
+          %Account{key: params.owner_record},
+          %Account{key: params.authority, signer?: true},
+          %Account{key: signatory_record, writable?: true},
+          %Account{key: params.beneficiary, writable?: true}
+        ],
+        data: Instruction.encode_data([8, signatory])
+      }
+    else
+      error -> error
     end
   end
 
@@ -1272,50 +1299,43 @@ defmodule Solana.SPL.Governance do
   #{NimbleOptions.docs(@insert_instruction_schema)}
   """
   def insert_instruction(opts) do
-    case validate(opts, @insert_instruction_schema) do
-      {:ok, %{program: program, proposal: proposal, index: index} = params} ->
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: params.governance},
-            %Account{key: proposal, writable?: true},
-            %Account{key: params.owner_record},
-            %Account{key: params.authority, signer?: true},
-            %Account{key: find_instruction_address(program, proposal, index), writable?: true},
-            %Account{key: params.payer, signer?: true},
-            %Account{key: SystemProgram.id()},
-            %Account{key: Solana.rent()}
-          ],
-          data:
-            Instruction.encode_data([
-              9,
-              {params.option_index, 16},
-              {index, 16},
-              {params.delay, 32}
-              | ix_data(params.instruction)
-            ])
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @insert_instruction_schema),
+         %{program: program, proposal: proposal, index: index, option: option} = params,
+         {:ok, instruction} <- find_instruction_address(program, proposal, index, option) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: params.governance},
+          %Account{key: proposal, writable?: true},
+          %Account{key: params.owner_record},
+          %Account{key: params.authority, signer?: true},
+          %Account{key: instruction, writable?: true},
+          %Account{key: params.payer, signer?: true},
+          %Account{key: SystemProgram.id()},
+          %Account{key: Solana.rent()}
+        ],
+        data:
+          Instruction.encode_data([
+            9,
+            {option, 16},
+            {index, 16},
+            {params.delay, 32}
+            | ix_data(params.instruction)
+          ])
+      }
+    else
+      error -> error
     end
   end
 
-  @doc false
-  def validate_instruction(%Instruction{} = ix), do: {:ok, ix}
-
-  def validate_instruction(other) do
-    {:error, "expected a Solana.Instruction, got: #{inspect(other)}"}
-  end
-
   defp ix_data(%Instruction{} = ix) do
-    [
+    List.flatten([
       ix.program,
       {length(ix.accounts), 32},
       Enum.map(ix.accounts, &account_data/1),
       {byte_size(ix.data), 32},
       ix.data
-    ]
+    ])
   end
 
   defp account_data(%Account{} = account) do
@@ -1339,10 +1359,10 @@ defmodule Solana.SPL.Governance do
       required: true,
       doc: "Public key of the account to receive the disposed instruction account's lamports."
     ],
-    index: [
-      type: :non_neg_integer,
+    instruction: [
+      type: {:custom, Key, :check, []},
       required: true,
-      doc: "The index indicating the instruction to remove."
+      doc: "The Proposal Instruction account indicating the instruction to remove."
     ],
     program: [
       type: {:custom, Key, :check, []},
@@ -1358,16 +1378,17 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@remove_instruction_schema)}
   """
+  # TODO create test case
   def remove_instruction(opts) do
     case validate(opts, @remove_instruction_schema) do
-      {:ok, %{program: program, proposal: proposal, index: index} = params} ->
+      {:ok, params} ->
         %Instruction{
-          program: program,
+          program: params.program,
           accounts: [
-            %Account{key: proposal, writable?: true},
+            %Account{key: params.proposal, writable?: true},
             %Account{key: params.owner_record},
             %Account{key: params.authority, signer?: true},
-            %Account{key: find_instruction_address(program, proposal, index), writable?: true},
+            %Account{key: params.instruction, writable?: true},
             %Account{key: params.beneficiary, writable?: true}
           ],
           data: Instruction.encode_data([10])
@@ -1404,6 +1425,7 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@cancel_proposal_schema)}
   """
+  # TODO create test case
   def cancel_proposal(opts) do
     case validate(opts, @cancel_proposal_schema) do
       {:ok, params} ->
@@ -1447,25 +1469,23 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@sign_off_proposal_schema)}
   """
+  # TODO create test case
   def sign_off_proposal(opts) do
-    case validate(opts, @sign_off_proposal_schema) do
-      {:ok, %{program: program, signatory: signatory, proposal: proposal}} ->
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: proposal, writable?: true},
-            %Account{
-              key: find_signatory_record_address(program, proposal, signatory),
-              writable?: true
-            },
-            %Account{key: signatory, signer?: true},
-            %Account{key: clock()}
-          ],
-          data: Instruction.encode_data([12])
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @sign_off_proposal_schema),
+         %{program: program, signatory: signatory, proposal: proposal} = params,
+         {:ok, signatory_record} <- find_signatory_record_address(program, proposal, signatory) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: proposal, writable?: true},
+          %Account{key: signatory_record, writable?: true},
+          %Account{key: signatory, signer?: true},
+          %Account{key: clock()}
+        ],
+        data: Instruction.encode_data([12])
+      }
+    else
+      error -> error
     end
   end
 
@@ -1523,47 +1543,35 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@cast_vote_schema)}
   """
+  # TODO create test case
   def cast_vote(opts) do
-    case validate(opts, @cast_vote_schema) do
-      {:ok, %{program: program, mint: mint, realm: realm, proposal: proposal} = params} ->
-        voter_record = find_owner_record_address(program, realm, mint, params.voter)
-
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: realm},
-            %Account{key: params.governance},
-            %Account{key: proposal, writable?: true},
-            %Account{key: params.owner_record, writable?: true},
-            %Account{key: voter_record, writable?: true},
-            %Account{key: params.authority, signer?: true},
-            %Account{
-              key: find_vote_record_address(program, proposal, voter_record),
-              writable?: true
-            },
-            %Account{key: mint},
-            %Account{key: params.payer, signer?: true},
-            %Account{key: SystemProgram.id()},
-            %Account{key: Solana.rent()},
-            %Account{key: clock()}
-            | voter_weight_accounts(params)
-          ],
-          data:
-            Instruction.encode_data([
-              13 | vote_data(params.vote)
-            ])
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @cast_vote_schema),
+         %{program: program, mint: mint, realm: realm, proposal: proposal} = params,
+         {:ok, voter_record} <- find_owner_record_address(program, realm, mint, params.voter),
+         {:ok, vote_record} <- find_vote_record_address(program, proposal, voter_record) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: realm},
+          %Account{key: params.governance},
+          %Account{key: proposal, writable?: true},
+          %Account{key: params.owner_record, writable?: true},
+          %Account{key: voter_record, writable?: true},
+          %Account{key: params.authority, signer?: true},
+          %Account{key: vote_record, writable?: true},
+          %Account{key: mint},
+          %Account{key: params.payer, signer?: true},
+          %Account{key: SystemProgram.id()},
+          %Account{key: Solana.rent()},
+          %Account{key: clock()}
+          | voter_weight_accounts(params)
+        ],
+        data: Instruction.encode_data([13 | vote_data(params.vote)])
+      }
+    else
+      error -> error
     end
   end
-
-  @doc false
-  def validate_vote({rank, weight} = vote) when rank in 0..255 and weight in 0..100,
-    do: {:ok, vote}
-
-  def validate_vote(other), do: {:error, "Expected a {rank, weight} tuple, got #{inspect(other)}"}
 
   defp vote_data([]), do: [1]
 
@@ -1601,6 +1609,7 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@finalize_vote_schema)}
   """
+  # TODO create test case
   def finalize_vote(opts) do
     case validate(opts, @finalize_vote_schema) do
       {:ok, params} ->
@@ -1663,27 +1672,25 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@relinquish_vote_schema)}
   """
+  # TODO create test case
   def relinquish_vote(opts) do
-    case validate(opts, @relinquish_vote_schema) do
-      {:ok, %{program: program, proposal: proposal, owner_record: owner_record} = params} ->
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: params.governance},
-            %Account{key: proposal, writable?: true},
-            %Account{key: owner_record, writable?: true},
-            %Account{
-              key: find_vote_record_address(program, proposal, owner_record),
-              writable?: true
-            },
-            %Account{key: params.mint}
-            | optional_relinquish_accounts(params)
-          ],
-          data: Instruction.encode_data([15])
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @relinquish_vote_schema),
+         %{program: program, proposal: proposal, owner_record: owner_record} = params,
+         {:ok, vote_record} <- find_vote_record_address(program, proposal, owner_record) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: params.governance},
+          %Account{key: proposal, writable?: true},
+          %Account{key: owner_record, writable?: true},
+          %Account{key: vote_record, writable?: true},
+          %Account{key: params.mint}
+          | optional_relinquish_accounts(params)
+        ],
+        data: Instruction.encode_data([15])
+      }
+    else
+      error -> error
     end
   end
 
@@ -1695,10 +1702,10 @@ defmodule Solana.SPL.Governance do
 
   @execute_instruction_schema [
     proposal: [type: {:custom, Key, :check, []}, required: true, doc: "The proposal account."],
-    index: [
-      type: :non_neg_integer,
+    instruction: [
+      type: {:custom, Key, :check, []},
       required: true,
-      doc: "The index indicating the instruction to execute."
+      doc: "The Proposal Instruction account containing the instruction to execute."
     ],
     accounts: [
       type: {:list, {:custom, __MODULE__, :validate_account, []}},
@@ -1725,14 +1732,15 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@execute_instruction_schema)}
   """
+  # TODO create test case
   def execute_instruction(opts) do
     case validate(opts, @execute_instruction_schema) do
-      {:ok, %{program: program, proposal: proposal, index: index} = params} ->
+      {:ok, params} ->
         %Instruction{
-          program: program,
+          program: params.program,
           accounts: [
-            %Account{key: proposal, writable?: true},
-            %Account{key: find_instruction_address(program, proposal, index), writable?: true},
+            %Account{key: params.proposal, writable?: true},
+            %Account{key: params.instruction, writable?: true},
             %Account{key: clock()}
             | params.accounts
           ],
@@ -1742,13 +1750,6 @@ defmodule Solana.SPL.Governance do
       error ->
         error
     end
-  end
-
-  @doc false
-  def validate_account(%Account{} = account), do: {:ok, account}
-
-  def validate_account(other) do
-    {:error, "expected a Solana.Account, got #{inspect(other)}"}
   end
 
   @set_governance_config_schema [
@@ -1786,6 +1787,7 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@set_governance_config_schema)}
   """
+  # TODO create test case
   def set_governance_config(opts) do
     case validate(opts, @set_governance_config_schema) do
       {:ok, params} ->
@@ -1795,7 +1797,7 @@ defmodule Solana.SPL.Governance do
             %Account{key: params.realm},
             %Account{key: params.governance, writable?: true, signer?: true}
           ],
-          data: Instruction.encode_data([19 | serialize_config(params.config)])
+          data: Instruction.encode_data([19 | governance_config_data(params.config)])
         }
 
       error ->
@@ -1805,10 +1807,10 @@ defmodule Solana.SPL.Governance do
 
   @flag_instruction_error_schema [
     proposal: [type: {:custom, Key, :check, []}, required: true, doc: "The proposal account."],
-    index: [
-      type: :non_neg_integer,
+    instruction: [
+      type: {:custom, Key, :check, []},
       required: true,
-      doc: "The index indicating the instruction to flag."
+      doc: "The Proposal Instruction account to flag."
     ],
     authority: [
       type: {:custom, Key, :check, []},
@@ -1833,16 +1835,17 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@flag_instruction_error_schema)}
   """
+  # TODO create test case
   def flag_instruction_error(opts) do
     case validate(opts, @flag_instruction_error_schema) do
-      {:ok, %{program: program, proposal: proposal, index: index} = params} ->
+      {:ok, params} ->
         %Instruction{
-          program: program,
+          program: params.program,
           accounts: [
-            %Account{key: proposal, writable?: true},
+            %Account{key: params.proposal, writable?: true},
             %Account{key: params.owner_record},
             %Account{key: params.authority, signer?: true},
-            %Account{key: find_instruction_address(program, proposal, index), writable?: true},
+            %Account{key: params.instruction, writable?: true},
             %Account{key: clock()}
           ],
           data: Instruction.encode_data([20])
@@ -1866,18 +1869,15 @@ defmodule Solana.SPL.Governance do
     ],
     new: [
       type: {:custom, Key, :check, []},
-      required: true,
-      doc: "The new realm authority. Must be one of the realm governances."
+      doc: """
+      The new realm authority. Must be one of the realm governances.
+      If this is not included, the current realm authority is removed.
+      """
     ],
     program: [
       type: {:custom, Key, :check, []},
       required: true,
       doc: "Public key of the governance program instance to use."
-    ],
-    remove_authority?: [
-      type: :boolean,
-      default: false,
-      doc: "Whether or not to remove the realm authority."
     ]
   ]
   @doc """
@@ -1887,6 +1887,7 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@set_realm_authority_schema)}
   """
+  # TODO create test case
   def set_realm_authority(opts) do
     case validate(opts, @set_realm_authority_schema) do
       {:ok, params} ->
@@ -1894,16 +1895,18 @@ defmodule Solana.SPL.Governance do
           program: params.program,
           accounts: [
             %Account{key: params.realm, writable?: true},
-            %Account{key: params.current, signer?: true},
-            %Account{key: params.new}
+            %Account{key: params.current, signer?: true}
           ],
-          data: Instruction.encode_data([21, unary(params.remove_authority?)])
+          data: Instruction.encode_data([21 | realm_authority_data(params)])
         }
 
       error ->
         error
     end
   end
+
+  defp realm_authority_data(%{new: new}), do: [1, new]
+  defp realm_authority_data(_), do: [0]
 
   @set_realm_config_schema [
     realm: [type: {:custom, Key, :check, []}, required: true, doc: "The realm account."],
@@ -1941,64 +1944,32 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@set_realm_config_schema)}
   """
+  # TODO add test case
   def set_realm_config(opts) do
-    case validate(opts, @set_realm_config_schema) do
-      {:ok, %{program: program, realm: realm} = params} ->
-        %Instruction{
-          program: program,
-          accounts:
-            List.flatten([
-              %Account{key: realm, writable?: true},
-              %Account{key: params.authority, signer?: true},
-              council_accounts(params),
-              %Account{key: SystemProgram.id()},
-              %Account{key: find_realm_config_address(program, realm), writable?: true},
-              payer_account(params),
-              voter_weight_addin_account(params)
-            ]),
-          data: Instruction.encode_data([22 | realm_config_data(params)])
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @set_realm_config_schema),
+         %{program: program, realm: realm} = params,
+         {:ok, realm_config} <- find_realm_config_address(program, realm) do
+      %Instruction{
+        program: program,
+        accounts:
+          List.flatten([
+            %Account{key: realm, writable?: true},
+            %Account{key: params.authority, signer?: true},
+            council_accounts(params),
+            %Account{key: SystemProgram.id()},
+            %Account{key: realm_config, writable?: true},
+            payer_account(params),
+            voter_weight_addin_accounts(params)
+          ]),
+        data: Instruction.encode_data([22 | realm_config_data(params)])
+      }
+    else
+      error -> error
     end
   end
 
   defp payer_account(%{payer: payer}), do: [%Account{key: payer, signer?: true}]
   defp payer_account(_), do: []
-
-  defp council_accounts(%{council_mint: mint, realm: realm, program: program}) do
-    [
-      %Account{key: mint},
-      %Account{key: find_holding_address(program, realm, mint), writable?: true}
-    ]
-  end
-
-  defp council_accounts(_), do: []
-
-  defp voter_weight_addin_account(%{addin: addin}), do: [%Account{key: addin}]
-  defp voter_weight_addin_account(_), do: []
-
-  @doc false
-  def validate_max_vote_weight_source({type, value})
-      when type in @max_vote_weight_sources and is_integer(value) and value > 0 do
-    {:ok, {type, value}}
-  end
-
-  def validate_max_vote_weight_source(_), do: {:error, "invalid max vote weight source"}
-
-  defp realm_config_data(params) do
-    [
-      unary(Map.has_key?(params, :council_mint)),
-      {params.minimum, 64},
-      Enum.find_index(
-        @max_vote_weight_sources,
-        &(&1 == elem(params.max_vote_weight_source, 0))
-      ),
-      {elem(params.max_vote_weight_source, 1), 64},
-      unary(Map.has_key?(params, :addin))
-    ]
-  end
 
   @create_owner_record_schema [
     realm: [type: {:custom, Key, :check, []}, required: true, doc: "The realm account."],
@@ -2034,27 +2005,25 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@create_owner_record_schema)}
   """
+  # TODO add test case
   def create_owner_record(opts) do
-    case validate(opts, @create_owner_record_schema) do
-      {:ok, %{program: program, realm: realm, mint: mint, owner: owner} = params} ->
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: realm},
-            %Account{key: owner},
-            %Account{
-              key: find_owner_record_address(program, realm, mint, owner),
-              writable?: true
-            },
-            %Account{key: mint},
-            %Account{key: params.payer, signer?: true},
-            %Account{key: SystemProgram.id()}
-          ],
-          data: Instruction.encode_data([23])
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @create_owner_record_schema),
+         %{program: program, realm: realm, mint: mint, owner: owner} = params,
+         {:ok, owner_record} <- find_owner_record_address(program, realm, mint, owner) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: realm},
+          %Account{key: owner},
+          %Account{key: owner_record, writable?: true},
+          %Account{key: mint},
+          %Account{key: params.payer, signer?: true},
+          %Account{key: SystemProgram.id()}
+        ],
+        data: Instruction.encode_data([23])
+      }
+    else
+      error -> error
     end
   end
 
@@ -2080,21 +2049,21 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@update_program_metadata_schema)}
   """
+  # TODO add test case
   def update_program_metadata(opts) do
-    case validate(opts, @update_program_metadata_schema) do
-      {:ok, params} ->
-        %Instruction{
-          program: params.program,
-          accounts: [
-            %Account{key: find_metadata_address(params.program), writable?: true},
-            %Account{key: params.payer, signer?: true},
-            %Account{key: SystemProgram.id()}
-          ],
-          data: Instruction.encode_data([24])
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @update_program_metadata_schema),
+         {:ok, metadata} <- find_metadata_address(params.program) do
+      %Instruction{
+        program: params.program,
+        accounts: [
+          %Account{key: metadata, writable?: true},
+          %Account{key: params.payer, signer?: true},
+          %Account{key: SystemProgram.id()}
+        ],
+        data: Instruction.encode_data([24])
+      }
+    else
+      error -> error
     end
   end
 
@@ -2128,22 +2097,23 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@create_native_treasury_schema)}
   """
+  # TODO create test case
   def create_native_treasury(opts) do
-    case validate(opts, @create_native_treasury_schema) do
-      {:ok, %{program: program, governance: governance} = params} ->
-        %Instruction{
-          program: program,
-          accounts: [
-            %Account{key: governance},
-            %Account{key: find_native_treasury_address(program, governance), writable?: true},
-            %Account{key: params.payer, signer?: true},
-            %Account{key: SystemProgram.id()}
-          ],
-          data: Instruction.encode_data([25])
-        }
-
-      error ->
-        error
+    with {:ok, params} <- validate(opts, @create_native_treasury_schema),
+         %{program: program, governance: governance} = params,
+         {:ok, native_treasury} <- find_native_treasury_address(program, governance) do
+      %Instruction{
+        program: program,
+        accounts: [
+          %Account{key: governance},
+          %Account{key: native_treasury, writable?: true},
+          %Account{key: params.payer, signer?: true},
+          %Account{key: SystemProgram.id()}
+        ],
+        data: Instruction.encode_data([25])
+      }
+    else
+      error -> error
     end
   end
 
