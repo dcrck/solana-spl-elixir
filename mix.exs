@@ -72,6 +72,9 @@ defmodule Solana.SPL.MixProject do
           Solana.SPL.Token,
           Solana.SPL.Token.Mint,
           Solana.SPL.Token.MultiSig
+        ],
+        Governance: [
+          Solana.SPL.Governance
         ]
       ],
       nest_modules_by_prefix: [

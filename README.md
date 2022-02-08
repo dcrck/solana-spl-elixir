@@ -33,3 +33,4 @@ This library implements instructions and tests for the following programs:
   Program](https://spl.solana.com/associated-token-account):
   `Solana.SPL.AssociatedToken`
 - [x] [Token Swap Program](https://spl.solana.com/token): `Solana.SPL.TokenSwap`
+- [ ] [Governance Program](https://github.com/solana-labs/solana-program-library/tree/master/governance): `Solana.SPL.Governance`
