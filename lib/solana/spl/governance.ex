@@ -12,6 +12,7 @@ defmodule Solana.SPL.Governance do
   @max_vote_weight_sources [:fraction, :absolute]
   @vote_weight_sources [:deposit, :snapshot]
   @vote_thresholds [:yes, :quorum]
+  @set_realm_authority_actions [:set, :set_checked, :remove]
 
   @doc """
   The Governance program's default instance ID. Organizations can also deploy
@@ -162,17 +163,17 @@ defmodule Solana.SPL.Governance do
   end
 
   @doc """
-  Finds the `proposal`'s instruction address for the given `option` and `index`.
+  Finds the `proposal`'s transaction address for the given `option` and `index`.
   Should have the seeds: `["governance", proposal, option, index]`.
   """
-  @spec find_instruction_address(
+  @spec find_transaction_address(
           program :: Key.t(),
           proposal :: Key.t(),
           index :: non_neg_integer,
           option :: non_neg_integer
         ) :: Key.t()
-  def find_instruction_address(program, proposal, index, option \\ 0) do
-    find_address(["governance", proposal, <<option::size(16)>>, <<index::size(16)>>], program)
+  def find_transaction_address(program, proposal, index, option \\ 0) do
+    find_address(["governance", proposal, <<option::size(8)>>, <<index::size(16)>>], program)
   end
 
   defp find_address(seeds, program) do
@@ -252,7 +253,14 @@ defmodule Solana.SPL.Governance do
       required: true,
       doc: "Public key of the governance program instance to use."
     ],
-    addin: [type: {:custom, Key, :check, []}, doc: "Community voter weight add-in program ID."],
+    voter_weight_addin: [
+      type: {:custom, Key, :check, []},
+      doc: "Community voter weight add-in program ID."
+    ],
+    max_voter_weight_addin: [
+      type: {:custom, Key, :check, []},
+      doc: "Max Community voter weight add-in program ID."
+    ],
     name: [type: :string, required: true, doc: "The name of the new realm."],
     max_vote_weight_source: [
       type: {:custom, __MODULE__, :validate_max_vote_weight_source, []},
@@ -280,6 +288,7 @@ defmodule Solana.SPL.Governance do
     with {:ok, %{program: program, name: name} = params} <- validate(opts, @create_realm_schema),
          {:ok, realm} <- find_realm_address(program, name),
          {:ok, realm_config} <- find_realm_config_address(program, realm),
+         addin_accts = voter_weight_addin_accounts(params),
          {:ok, council_accts} <- council_accounts(Map.put(params, :realm, realm)),
          {:ok, holding_address} <- find_holding_address(program, realm, params.community_mint) do
       %Instruction{
@@ -295,8 +304,8 @@ defmodule Solana.SPL.Governance do
             %Account{key: Token.id()},
             %Account{key: Solana.rent()},
             council_accts,
-            %Account{key: realm_config, writable?: true},
-            voter_weight_addin_accounts(params)
+            addin_accts,
+            if(addin_accts != [], do: [%Account{key: realm_config, writable?: true}], else: [])
           ]),
         data:
           Instruction.encode_data([0, {byte_size(name), 32}, name | realm_config_data(params)])
@@ -315,8 +324,11 @@ defmodule Solana.SPL.Governance do
 
   defp council_accounts(_), do: {:ok, []}
 
-  defp voter_weight_addin_accounts(%{addin: addin}), do: [%Account{key: addin}]
-  defp voter_weight_addin_accounts(_), do: []
+  defp voter_weight_addin_accounts(params) do
+    [:voter_weight_addin, :max_voter_weight_addin]
+    |> Enum.filter(&Map.has_key?(params, &1))
+    |> Enum.map(&%Account{key: Map.get(params, &1)})
+  end
 
   defp realm_config_data(params) do
     [
@@ -327,7 +339,8 @@ defmodule Solana.SPL.Governance do
         &(&1 == elem(params.max_vote_weight_source, 0))
       ),
       {elem(params.max_vote_weight_source, 1), 64},
-      unary(Map.has_key?(params, :addin))
+      unary(Map.has_key?(params, :voter_weight_addin)),
+      unary(Map.has_key?(params, :max_voter_weight_addin)),
     ]
   end
 
@@ -631,6 +644,10 @@ defmodule Solana.SPL.Governance do
       type: {:custom, Key, :check, []},
       doc: "Public key of the voter weight record account."
     ],
+    max_voter_weight_record: [
+      type: {:custom, Key, :check, []},
+      doc: "Public key of the max voter weight record account."
+    ],
     config: [
       type: {:custom, Solana.Helpers, :validate, [@governance_config_schema]},
       required: true,
@@ -655,7 +672,9 @@ defmodule Solana.SPL.Governance do
   def create_account_governance(opts) do
     with {:ok, params} <- validate(opts, @create_account_governance_schema),
          %{program: program, realm: realm, governed: governed} = params,
-         {:ok, account_governance} <- find_account_governance_address(program, realm, governed) do
+         {:ok, account_governance} <- find_account_governance_address(program, realm, governed),
+         {:ok, voter_weight_accts} <- voter_weight_accounts(params) do
+
       %Instruction{
         program: program,
         accounts: [
@@ -667,7 +686,7 @@ defmodule Solana.SPL.Governance do
           %Account{key: SystemProgram.id()},
           %Account{key: Solana.rent()},
           %Account{key: params.authority, signer?: true}
-          | voter_weight_accounts(params)
+          | voter_weight_accts
         ],
         data: Instruction.encode_data([4 | governance_config_data(params.config)])
       }
@@ -716,6 +735,10 @@ defmodule Solana.SPL.Governance do
       type: {:custom, Key, :check, []},
       doc: "Public key of the voter weight record account."
     ],
+    max_voter_weight_record: [
+      type: {:custom, Key, :check, []},
+      doc: "Public key of the max voter weight record account."
+    ],
     transfer_upgrade_authority?: [
       type: :boolean,
       default: false,
@@ -749,7 +772,8 @@ defmodule Solana.SPL.Governance do
     with {:ok, params} <- validate(opts, @create_program_governance_schema),
          %{program: program, realm: realm, governed: governed} = params,
          {:ok, program_governance} <- find_program_governance_address(program, realm, governed),
-         {:ok, program_data} <- find_program_data(program) do
+         {:ok, program_data} <- find_program_data(program),
+         {:ok, voter_weight_accts} <- voter_weight_accounts(params) do
       %Instruction{
         program: program,
         accounts: [
@@ -764,7 +788,7 @@ defmodule Solana.SPL.Governance do
           %Account{key: SystemProgram.id()},
           %Account{key: Solana.rent()},
           %Account{key: params.authority, signer?: true}
-          | voter_weight_accounts(params)
+          | voter_weight_accts
         ],
         data:
           Instruction.encode_data(
@@ -823,6 +847,10 @@ defmodule Solana.SPL.Governance do
       type: {:custom, Key, :check, []},
       doc: "Public key of the voter weight record account."
     ],
+    max_voter_weight_record: [
+      type: {:custom, Key, :check, []},
+      doc: "Public key of the max voter weight record account."
+    ],
     config: [
       type: {:custom, Solana.Helpers, :validate, [@governance_config_schema]},
       required: true,
@@ -854,7 +882,8 @@ defmodule Solana.SPL.Governance do
   def create_mint_governance(opts) do
     with {:ok, params} <- validate(opts, @create_mint_governance_schema),
          %{program: program, realm: realm, governed: mint} = params,
-         {:ok, mint_governance} <- find_mint_governance_address(program, realm, mint) do
+         {:ok, mint_governance} <- find_mint_governance_address(program, realm, mint),
+         {:ok, voter_weight_accts} <- voter_weight_accounts(params) do
       %Instruction{
         program: program,
         accounts: [
@@ -866,9 +895,8 @@ defmodule Solana.SPL.Governance do
           %Account{key: params.payer, signer?: true},
           %Account{key: Token.id()},
           %Account{key: SystemProgram.id()},
-          %Account{key: Solana.rent()},
           %Account{key: params.authority, signer?: true}
-          | voter_weight_accounts(params)
+          | voter_weight_accts
         ],
         data:
           Instruction.encode_data(
@@ -924,6 +952,10 @@ defmodule Solana.SPL.Governance do
       type: {:custom, Key, :check, []},
       doc: "Public key of the voter weight record account."
     ],
+    max_voter_weight_record: [
+      type: {:custom, Key, :check, []},
+      doc: "Public key of the max voter weight record account."
+    ],
     config: [
       type: {:custom, Solana.Helpers, :validate, [@governance_config_schema]},
       required: true,
@@ -956,7 +988,8 @@ defmodule Solana.SPL.Governance do
   def create_token_governance(opts) do
     with {:ok, params} <- validate(opts, @create_token_governance_schema),
          %{program: program, realm: realm, governed: governed} = params,
-         {:ok, token_governance} <- find_token_governance_address(program, realm, governed) do
+         {:ok, token_governance} <- find_token_governance_address(program, realm, governed),
+         {:ok, voter_weight_accts} <- voter_weight_accounts(params) do
       %Instruction{
         program: program,
         accounts: [
@@ -970,7 +1003,7 @@ defmodule Solana.SPL.Governance do
           %Account{key: SystemProgram.id()},
           %Account{key: Solana.rent()},
           %Account{key: params.authority, signer?: true}
-          | voter_weight_accounts(params)
+          | voter_weight_accts
         ],
         data:
           Instruction.encode_data(
@@ -1026,6 +1059,10 @@ defmodule Solana.SPL.Governance do
       type: {:custom, Key, :check, []},
       doc: "Public key of the voter weight record account."
     ],
+    max_voter_weight_record: [
+      type: {:custom, Key, :check, []},
+      doc: "Public key of the max voter weight record account."
+    ],
     name: [type: :string, required: true, doc: "The proposal name."],
     description: [type: :string, required: true, doc: "The proposal explanation."],
     vote_type: [
@@ -1064,7 +1101,8 @@ defmodule Solana.SPL.Governance do
          :ok <- check_proposal_options(params),
          %{program: program, realm: realm, governance: governance, owner: owner} = params,
          {:ok, proposal} <- find_proposal_address(program, governance, params.mint, params.index),
-         {:ok, owner_record} <- find_owner_record_address(program, realm, params.mint, owner) do
+         {:ok, owner_record} <- find_owner_record_address(program, realm, params.mint, owner),
+         {:ok, voter_weight_accts} <- voter_weight_accounts(params) do
       %Instruction{
         program: program,
         accounts: [
@@ -1078,7 +1116,7 @@ defmodule Solana.SPL.Governance do
           %Account{key: SystemProgram.id()},
           %Account{key: Solana.rent()},
           %Account{key: clock()}
-          | voter_weight_accounts(params)
+          | voter_weight_accts
         ],
         data:
           Instruction.encode_data(
@@ -1238,7 +1276,7 @@ defmodule Solana.SPL.Governance do
     end
   end
 
-  @insert_instruction_schema [
+  @insert_transaction_schema [
     governance: [type: {:custom, Key, :check, []}, required: true, doc: "The governance account."],
     proposal: [type: {:custom, Key, :check, []}, required: true, doc: "The proposal account."],
     owner_record: [
@@ -1274,10 +1312,10 @@ defmodule Solana.SPL.Governance do
       `instruction` being eligible for execution.
       """
     ],
-    instruction: [
-      type: {:custom, __MODULE__, :validate_instruction, []},
+    instructions: [
+      type: {:list, {:custom, __MODULE__, :validate_instruction, []}},
       required: true,
-      doc: "Data for the instruction to be executed"
+      doc: "Data for the instructions to be executed"
     ],
     program: [
       type: {:custom, Key, :check, []},
@@ -1286,22 +1324,22 @@ defmodule Solana.SPL.Governance do
     ]
   ]
   @doc """
-  Generates the instructions to insert an instruction into the proposal at the
+  Generates the instructions to insert a transaction into the proposal at the
   given `index`.
 
-  New instructions must be inserted at the end of the range indicated by the
-  proposal's `instruction_next_index` property. If an instruction replaces an
-  existing Instruction at a given `index`, the old one must first be removed by
-  calling `Solana.SPL.Governance.remove_instruction/1`.
+  New transactions must be inserted at the end of the range indicated by the
+  proposal's `transaction_next_index` property. If a transaction replaces an
+  existing transaction at a given `index`, the old one must first be removed by
+  calling `Solana.SPL.Governance.remove_transaction/1`.
 
   ## Options
 
-  #{NimbleOptions.docs(@insert_instruction_schema)}
+  #{NimbleOptions.docs(@insert_transaction_schema)}
   """
-  def insert_instruction(opts) do
-    with {:ok, params} <- validate(opts, @insert_instruction_schema),
+  def insert_transaction(opts) do
+    with {:ok, params} <- validate(opts, @insert_transaction_schema),
          %{program: program, proposal: proposal, index: index, option: option} = params,
-         {:ok, instruction} <- find_instruction_address(program, proposal, index, option) do
+         {:ok, transaction} <- find_transaction_address(program, proposal, index, option) do
       %Instruction{
         program: program,
         accounts: [
@@ -1309,7 +1347,7 @@ defmodule Solana.SPL.Governance do
           %Account{key: proposal, writable?: true},
           %Account{key: params.owner_record},
           %Account{key: params.authority, signer?: true},
-          %Account{key: instruction, writable?: true},
+          %Account{key: transaction, writable?: true},
           %Account{key: params.payer, signer?: true},
           %Account{key: SystemProgram.id()},
           %Account{key: Solana.rent()}
@@ -1317,16 +1355,18 @@ defmodule Solana.SPL.Governance do
         data:
           Instruction.encode_data([
             9,
-            {option, 16},
+            option,
             {index, 16},
-            {params.delay, 32}
-            | ix_data(params.instruction)
+            {params.delay, 32} |
+            tx_data(params.instructions)
           ])
       }
     else
       error -> error
     end
   end
+
+  defp tx_data(ixs), do: List.flatten([{length(ixs), 32} | Enum.map(ixs, &ix_data/1)])
 
   defp ix_data(%Instruction{} = ix) do
     List.flatten([
@@ -1342,7 +1382,7 @@ defmodule Solana.SPL.Governance do
     [account.key, unary(account.signer?), unary(account.writable?)]
   end
 
-  @remove_instruction_schema [
+  @remove_transaction_schema [
     proposal: [type: {:custom, Key, :check, []}, required: true, doc: "The proposal account."],
     owner_record: [
       type: {:custom, Key, :check, []},
@@ -1359,10 +1399,10 @@ defmodule Solana.SPL.Governance do
       required: true,
       doc: "Public key of the account to receive the disposed instruction account's lamports."
     ],
-    instruction: [
+    transaction: [
       type: {:custom, Key, :check, []},
       required: true,
-      doc: "The Proposal Instruction account indicating the instruction to remove."
+      doc: "The Proposal Transaction account indicating the transaction to remove."
     ],
     program: [
       type: {:custom, Key, :check, []},
@@ -1371,16 +1411,16 @@ defmodule Solana.SPL.Governance do
     ]
   ]
   @doc """
-  Generates the instructions to remove the Instruction data at the given `index`
+  Generates the instructions to remove the Transaction data at the given `index`
   from the given `proposal`.
 
   ## Options
 
-  #{NimbleOptions.docs(@remove_instruction_schema)}
+  #{NimbleOptions.docs(@remove_transaction_schema)}
   """
   # TODO create test case
-  def remove_instruction(opts) do
-    case validate(opts, @remove_instruction_schema) do
+  def remove_transaction(opts) do
+    case validate(opts, @remove_transaction_schema) do
       {:ok, params} ->
         %Instruction{
           program: params.program,
@@ -1388,7 +1428,7 @@ defmodule Solana.SPL.Governance do
             %Account{key: params.proposal, writable?: true},
             %Account{key: params.owner_record},
             %Account{key: params.authority, signer?: true},
-            %Account{key: params.instruction, writable?: true},
+            %Account{key: params.transaction, writable?: true},
             %Account{key: params.beneficiary, writable?: true}
           ],
           data: Instruction.encode_data([10])
@@ -1513,6 +1553,10 @@ defmodule Solana.SPL.Governance do
       type: {:custom, Key, :check, []},
       doc: "Public key of the voter weight record account."
     ],
+    max_voter_weight_record: [
+      type: {:custom, Key, :check, []},
+      doc: "Public key of the max voter weight record account."
+    ],
     voter: [
       type: {:custom, Key, :check, []},
       required: true,
@@ -1548,7 +1592,8 @@ defmodule Solana.SPL.Governance do
     with {:ok, params} <- validate(opts, @cast_vote_schema),
          %{program: program, mint: mint, realm: realm, proposal: proposal} = params,
          {:ok, voter_record} <- find_owner_record_address(program, realm, mint, params.voter),
-         {:ok, vote_record} <- find_vote_record_address(program, proposal, voter_record) do
+         {:ok, vote_record} <- find_vote_record_address(program, proposal, voter_record),
+         {:ok, voter_weight_accts} <- voter_weight_accounts(params) do
       %Instruction{
         program: program,
         accounts: [
@@ -1564,7 +1609,7 @@ defmodule Solana.SPL.Governance do
           %Account{key: SystemProgram.id()},
           %Account{key: Solana.rent()},
           %Account{key: clock()}
-          | voter_weight_accounts(params)
+          | voter_weight_accts
         ],
         data: Instruction.encode_data([13 | vote_data(params.vote)])
       }
@@ -1871,13 +1916,22 @@ defmodule Solana.SPL.Governance do
       type: {:custom, Key, :check, []},
       doc: """
       The new realm authority. Must be one of the realm governances.
-      If this is not included, the current realm authority is removed.
       """
     ],
     program: [
       type: {:custom, Key, :check, []},
       required: true,
       doc: "Public key of the governance program instance to use."
+    ],
+    action: [
+      type: {:in, @set_realm_authority_actions},
+      required: true,
+      doc: """
+      The action to apply to the current realm authority. `:set` sets the new
+      realm authority without checks, `:set_checked` makes sure the new
+      authority is one of the realm's governances, and `:remove` removes the
+      realm authority.
+      """
     ]
   ]
   @doc """
@@ -1887,7 +1941,6 @@ defmodule Solana.SPL.Governance do
 
   #{NimbleOptions.docs(@set_realm_authority_schema)}
   """
-  # TODO create test case
   def set_realm_authority(opts) do
     case validate(opts, @set_realm_authority_schema) do
       {:ok, params} ->
@@ -1895,9 +1948,13 @@ defmodule Solana.SPL.Governance do
           program: params.program,
           accounts: [
             %Account{key: params.realm, writable?: true},
-            %Account{key: params.current, signer?: true}
+            %Account{key: params.current, signer?: true} |
+            new_realm_authority_account(params)
           ],
-          data: Instruction.encode_data([21 | realm_authority_data(params)])
+          data: Instruction.encode_data([
+            21,
+            Enum.find_index(@set_realm_authority_actions, &(&1 == params.action))
+          ])
         }
 
       error ->
@@ -1905,8 +1962,8 @@ defmodule Solana.SPL.Governance do
     end
   end
 
-  defp realm_authority_data(%{new: new}), do: [1, new]
-  defp realm_authority_data(_), do: [0]
+  defp new_realm_authority_account(%{action: :remove}), do: []
+  defp new_realm_authority_account(%{new: new}), do: [%Account{key: new}]
 
   @set_realm_config_schema [
     realm: [type: {:custom, Key, :check, []}, required: true, doc: "The realm account."],
@@ -1916,7 +1973,14 @@ defmodule Solana.SPL.Governance do
       type: {:custom, Key, :check, []},
       doc: "The account which will pay for the Realm Config account's creation."
     ],
-    addin: [type: {:custom, Key, :check, []}, doc: "Community voter weight add-in program ID."],
+    voter_weight_addin: [
+      type: {:custom, Key, :check, []},
+      doc: "Community voter weight add-in program ID."
+    ],
+    max_voter_weight_addin: [
+      type: {:custom, Key, :check, []},
+      doc: "Max Community voter weight add-in program ID."
+    ],
     program: [
       type: {:custom, Key, :check, []},
       required: true,
@@ -1948,6 +2012,7 @@ defmodule Solana.SPL.Governance do
   def set_realm_config(opts) do
     with {:ok, params} <- validate(opts, @set_realm_config_schema),
          %{program: program, realm: realm} = params,
+         addin_accts = voter_weight_addin_accounts(params),
          {:ok, realm_config} <- find_realm_config_address(program, realm) do
       %Instruction{
         program: program,
@@ -1958,8 +2023,8 @@ defmodule Solana.SPL.Governance do
             council_accounts(params),
             %Account{key: SystemProgram.id()},
             %Account{key: realm_config, writable?: true},
-            payer_account(params),
-            voter_weight_addin_accounts(params)
+            addin_accts,
+            if(addin_accts != [], do: payer_account(params), else: [])
           ]),
         data: Instruction.encode_data([22 | realm_config_data(params)])
       }
@@ -2122,9 +2187,15 @@ defmodule Solana.SPL.Governance do
 
   defp unary(condition), do: if(condition, do: 1, else: 0)
 
-  defp voter_weight_accounts(%{voter_weight_record: record, realm: realm, program: program}) do
-    [%Account{key: find_realm_config_address(program, realm)}, %Account{key: record}]
+  defp voter_weight_accounts(%{realm: realm, program: program} = params) do
+    case find_realm_config_address(program, realm) do
+      {:ok, config} ->
+        [:voter_weight_record, :max_voter_weight_record]
+        |> Enum.filter(&Map.has_key?(params, &1))
+        |> Enum.map(&%Account{key: &1})
+        |> then(&{:ok, [%Account{key: config} | &1]})
+      error ->
+        error
+    end
   end
-
-  defp voter_weight_accounts(_), do: []
 end

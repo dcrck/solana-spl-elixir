@@ -120,7 +120,8 @@ defmodule Solana.SPL.GovernanceTest do
           realm: realm,
           current: pubkey!(payer),
           new: governance,
-          program: program
+          program: program,
+          action: :set
         ),
         Governance.create_proposal(
           payer: pubkey!(payer),
@@ -136,14 +137,14 @@ defmodule Solana.SPL.GovernanceTest do
           options: ["Approve"],
           index: proposal_index
         ),
-        Governance.insert_instruction(
+        Governance.insert_transaction(
           governance: governance,
           proposal: proposal,
           index: proposal_index,
           owner_record: owner_record,
           authority: pubkey!(payer),
           payer: pubkey!(payer),
-          instruction: mint_to_ix,
+          instructions: [mint_to_ix],
           program: program
         )
       ],
